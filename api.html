@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tài liệu API Tích hợp - PIIScan Server Pro</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script>
+    if (localStorage.getItem('theme') === 'light') {
+      document.documentElement.classList.add('light-theme');
+    }
+  </script>
+</head>
+<body>
+
+<!-- ===== THANH ĐIỀU HƯỚNG (NAVBAR) ===== -->
+<nav class="navbar" id="navbar">
+  <div class="nav-container">
+    <a href="index.html" class="nav-logo">
+      <span class="logo-icon">🔍</span>
+      <span class="logo-text">PII<span class="logo-accent">Scan</span> Server</span>
+    </a>
+    <div class="nav-links">
+      <a href="index.html" class="nav-link">Trang chủ</a>
+      <a href="api.html" class="nav-link active">API Tích hợp</a>
+      <a href="docs.html" class="nav-link">Tài liệu hướng dẫn</a>
+    </div>
+    <div class="nav-actions">
+      <button class="btn-ghost" id="themeToggle">🌙</button>
+      <button class="btn-outline">Đăng nhập</button>
+      <button class="btn-primary">Nhận mã API</button>
+    </div>
+  </div>
+</nav>
+
+<!-- ===== PAGE HEADER ===== -->
+<header class="page-header">
+  <h1 class="page-title">Tài liệu tích hợp <span class="gradient-text">REST API</span></h1>
+  <p class="page-subtitle">Tích hợp tính năng quét mã độc và rò rỉ dữ liệu cá nhân tự động vào hệ thống CI/CD pipeline hoặc bảng điều khiển máy chủ của bạn.</p>
+</header>
+
+<!-- ===== DOCS LAYOUT ===== -->
+<div class="docs-container">
+  
+  <!-- Sidebar -->
+  <aside class="docs-sidebar">
+    <div class="sidebar-group">
+      <h4 class="sidebar-title">Bắt đầu</h4>
+      <a href="#authentication" class="sidebar-link active">Xác thực API Key</a>
+      <a href="#rate-limits" class="sidebar-link">Giới hạn Tần suất</a>
+    </div>
+    
+    <div class="sidebar-group">
+      <h4 class="sidebar-title">Quét kiểm tra</h4>
+      <a href="#scan-path" class="sidebar-link">Quét thư mục máy chủ</a>
+      <a href="#upload-file" class="sidebar-link">Quét tệp tin đơn lẻ</a>
+    </div>
+    
+    <div class="sidebar-group">
+      <h4 class="sidebar-title">Báo cáo & Khắc phục</h4>
+      <a href="#get-report" class="sidebar-link">Truy xuất Báo cáo</a>
+    </div>
+  </aside>
+
+  <!-- Content -->
+  <main class="docs-content">
+    
+    <section id="authentication">
+      <h2>Xác thực API Key</h2>
+      <p>API của PIIScan Server Pro sử dụng khóa API (API Key) được tạo ra từ bảng quản trị máy chủ để xác thực quyền truy cập.</p>
+      <p>Bạn cần cung cấp mã API Key này thông qua header HTTP <code>x-apikey</code> trong tất cả các yêu cầu gửi tới server.</p>
+      
+      <div class="code-block">
+        <div class="code-header">
+          <span>Ví dụ gửi yêu cầu</span>
+          <span class="code-lang">cURL</span>
+        </div>
+        <div class="code-content">
+          <pre><span class="token-keyword">curl</span> --request GET \
+  --url https://api.piiscan.pro/v1/reports/{scan_id} \
+  --header <span class="token-string">'x-apikey: MA_API_CUA_BAN'</span></pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="scan-path">
+      <h2>Quét thư mục máy chủ</h2>
+      <p>Yêu cầu máy chủ quét đệ quy toàn bộ các tệp tin trong một đường dẫn thư mục tuyệt đối trên ổ cứng.</p>
+      
+      <div class="endpoint-badge post">
+        <span>POST</span>
+        <span class="endpoint-url">https://api.piiscan.pro/v1/scan/path</span>
+      </div>
+
+      <h3>Tham số yêu cầu (JSON Body)</h3>
+      <table class="param-table">
+        <tr>
+          <th style="width: 200px;">Tham số</th>
+          <th>Mô tả chi tiết</th>
+        </tr>
+        <tr>
+          <td><span class="param-name">path</span> <span class="param-type">string</span></td>
+          <td>Đường dẫn tuyệt đối của thư mục cần quét trên hệ thống (Ví dụ: <code>/var/www/html/uploads</code>). Bắt buộc.</td>
+        </tr>
+        <tr>
+          <td><span class="param-name">recursive</span> <span class="param-type">boolean</span></td>
+          <td>Có thực hiện quét đệ quy các thư mục con hay không. Mặc định là <code>true</code>.</td>
+        </tr>
+      </table>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span>Ví dụ sử dụng Node.js</span>
+          <span class="code-lang">JavaScript</span>
+        </div>
+        <div class="code-content">
+          <pre><span class="token-keyword">const</span> axios = <span class="token-function">require</span>(<span class="token-string">'axios'</span>);
+ 
+axios.<span class="token-function">post</span>(<span class="token-string">'https://api.piiscan.pro/v1/scan/path'</span>, {
+  path: <span class="token-string">'/var/www/html/uploads/'</span>,
+  recursive: <span class="token-keyword">true</span>
+}, {
+  headers: { <span class="token-string">'x-apikey'</span>: <span class="token-string">'MA_API_CUA_BAN'</span> }
+}).<span class="token-function">then</span>(response => {
+  console.<span class="token-function">log</span>(response.data);
+});</pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="upload-file">
+      <h2>Quét tệp tin đơn lẻ</h2>
+      <p>Tải lên một tệp tin đơn lẻ trực tiếp từ client để phân tích rủi ro an ninh mạng và dữ liệu cá nhân nhanh chóng trước khi tệp được lưu vào đĩa cứng.</p>
+      
+      <div class="endpoint-badge post">
+        <span>POST</span>
+        <span class="endpoint-url">https://api.piiscan.pro/v1/scan/file</span>
+      </div>
+
+      <h3>Tham số yêu cầu (FormData)</h3>
+      <table class="param-table">
+        <tr>
+          <th style="width: 200px;">Tham số</th>
+          <th>Mô tả chi tiết</th>
+        </tr>
+        <tr>
+          <td><span class="param-name">file</span> <span class="param-type">file</span></td>
+          <td>Dữ liệu nhị phân của tệp tin. Dung lượng tối đa hỗ trợ: 50MB. Bắt buộc.</td>
+        </tr>
+      </table>
+    </section>
+
+    <section id="get-report">
+      <h2>Truy xuất Báo cáo</h2>
+      <p>Lấy kết quả chi tiết của phiên quét, bao gồm danh sách các vi phạm dữ liệu cá nhân, điểm đánh giá bảo mật và các kiến nghị khắc phục.</p>
+      
+      <div class="endpoint-badge get">
+        <span>GET</span>
+        <span class="endpoint-url">https://api.piiscan.pro/v1/reports/{scan_id}</span>
+      </div>
+
+      <h3>Tham số trên đường dẫn (Path parameters)</h3>
+      <table class="param-table">
+        <tr>
+          <th style="width: 200px;">Tham số</th>
+          <th>Mô tả chi tiết</th>
+        </tr>
+        <tr>
+          <td><span class="param-name">scan_id</span> <span class="param-type">string</span></td>
+          <td>Mã định danh duy nhất của phiên quét hệ thống cần truy xuất. Bắt buộc.</td>
+        </tr>
+      </table>
+    </section>
+
+  </main>
+</div>
+
+<!-- ===== PHẦN FOOTER ===== -->
+<footer class="footer">
+  <div class="footer-container">
+    <div class="footer-brand">
+      <span class="logo-icon">🔍</span>
+      <span class="logo-text">PII<span class="logo-accent">Scan</span> Server</span>
+      <p>Giải pháp quét mã độc tự động và đánh giá tuân thủ bảo mật dữ liệu cá nhân toàn diện cho các máy chủ web hiện đại.</p>
+    </div>
+    <div class="footer-links">
+      <div class="footer-col">
+        <h4>Tính năng</h4>
+        <a href="#">Quét Máy chủ</a>
+        <a href="#">Kiểm toán Tuân thủ</a>
+        <a href="#">Khắc phục tự động</a>
+      </div>
+      <div class="footer-col">
+        <h4>Tài nguyên</h4>
+        <a href="api.html">Tài liệu API</a>
+        <a href="docs.html">Hướng dẫn sử dụng</a>
+        <a href="#">Hướng dẫn Nghị định 13</a>
+      </div>
+      <div class="footer-col">
+        <h4>Thông tin</h4>
+        <a href="#">Công ty</a>
+        <a href="#">Chính sách bảo mật</a>
+        <a href="#">Hỗ trợ kỹ thuật</a>
+      </div>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <p>© 2026 PIIScan Server Pro. Hệ thống kiểm toán máy chủ tự động tuân thủ Nghị định 13/2023/NĐ-CP và tiêu chuẩn quốc tế.</p>
+  </div>
+</footer>
+
+<script>
+  const links = document.querySelectorAll('.sidebar-link');
+  links.forEach(link => {
+    link.addEventListener('click', function() {
+      links.forEach(l => l.classList.remove('active'));
+      this.classList.add('active');
+    });
+  });
+
+  // Theme Toggle
+  const themeToggleBtn = document.getElementById('themeToggle');
+  const savedTheme = localStorage.getItem('theme');
+  if (savedTheme === 'light') {
+    document.documentElement.classList.add('light-theme');
+    if (themeToggleBtn) themeToggleBtn.textContent = '☀️';
+  } else {
+    document.documentElement.classList.remove('light-theme');
+    if (themeToggleBtn) themeToggleBtn.textContent = '🌙';
+  }
+  if (themeToggleBtn) {
+    themeToggleBtn.addEventListener('click', () => {
+      document.documentElement.classList.toggle('light-theme');
+      const isLight = document.documentElement.classList.contains('light-theme');
+      localStorage.setItem('theme', isLight ? 'light' : 'dark');
+      themeToggleBtn.textContent = isLight ? '☀️' : '🌙';
+    });
+  }
+</script>
+</body>
+</html>

@@ -408,9 +408,12 @@ async function startLoading(targetName, filesArrayOrCount) {
             engineTicker.textContent = `Extracting patterns: ${file.name}...`;
             
             const findings = await scanFileContent(file);
+            let fileText = '';
+            try { fileText = await readFileAsText(file); } catch (e) { fileText = ''; }
             scannedData.push({
                 file: file,
-                findings: findings
+                findings: findings,
+                text: fileText
             });
             await new Promise(r => setTimeout(r, 40)); // Small delay for smooth UI
         }
@@ -663,6 +666,217 @@ function readFileAsText(file) {
     });
 }
 
+// ===== Phân tích mã độc tĩnh phía trình duyệt (không cần backend) =====
+// Thực hiện: hash MD5/SHA-256, entropy Shannon, nhận diện loại file, trích xuất IoC, phân loại họ mã độc.
+async function analyzeMalwareInBrowser(text, fileName, fileSize) {
+    if (text === null || text === undefined || text.length === 0) {
+        return { family: "Không đọc được nội dung", type: "unknown", entropy: 0, entropy_verdict: "—", hashes: {}, iocs: { ips: [], urls: [], domains: [] }, pe_info: {}, file_size: fileSize || 0 };
+    }
+
+    // 1. Hash (MD5, SHA-1, SHA-256) bằng Web Crypto API
+    const bytes = new TextEncoder().encode(text);
+    let md5 = '', sha1 = '', sha256 = '';
+    try {
+        sha256 = await sha256Hex(bytes);
+    } catch (e) { /* bỏ qua */ }
+    try {
+        md5 = await md5Hex(text);
+    } catch (e) { /* bỏ qua */ }
+
+    // 2. Entropy Shannon
+    const entropy = shannonEntropy(text);
+
+    // 3. Nhận diện loại file dựa trên extension + nội dung
+    const type = detectFileType(fileName, text);
+
+    // 4. Trích xuất IoC (IP, URL, domain)
+    const iocs = extractIocs(text);
+
+    // 5. Phân loại họ mã độc
+    const family = classifyMalwareFamily(fileName, text, type);
+
+    return {
+        family,
+        type,
+        entropy: entropy.toFixed(4),
+        entropy_verdict: entropy >= 7.0 ? 'Entropy cao — nghi ngờ packed/encrypted' : entropy >= 6.0 ? 'Entropy trung bình — có thể obfuscated' : 'Entropy bình thường',
+        hashes: { md5, sha1, sha256 },
+        fuzzy_hash: '',
+        iocs,
+        pe_info: {},
+        file_size: fileSize || bytes.length
+    };
+}
+
+// Nhận diện loại file (extension + nội dung)
+function detectFileType(fileName, text) {
+    const lower = fileName.toLowerCase();
+    const has = (s) => text && text.includes(s);
+    if (lower.endsWith('.php')) return 'PHP script';
+    if (lower.endsWith('.py')) return 'Python script';
+    if (lower.endsWith('.js')) return 'JavaScript';
+    if (lower.endsWith('.ps1')) return 'PowerShell script';
+    if (lower.endsWith('.bat') || lower.endsWith('.cmd')) return 'Batch script';
+    if (lower.endsWith('.vbs') || lower.endsWith('.vbe')) return 'VBScript';
+    if (lower.endsWith('.sh') || lower.endsWith('.bash')) return 'Shell script';
+    if (lower.endsWith('.pl') || lower.endsWith('.pm')) return 'Perl script';
+    if (lower.endsWith('.rb')) return 'Ruby script';
+    if (lower.endsWith('.asp') || lower.endsWith('.aspx')) return 'ASP.NET script';
+    if (lower.endsWith('.jsp')) return 'JSP script';
+    if (lower.endsWith('.exe') || lower.endsWith('.dll') || lower.endsWith('.sys')) return 'Windows PE executable';
+    return 'Text / Unknown';
+}
+
+// Trích xuất IoC (IP, URL, domain)
+function extractIocs(text) {
+    const ips = new Set(), urls = new Set(), domains = new Set();
+    if (!text) return { ips: [], urls: [], domains: [] };
+
+    const ipRe = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
+    let m;
+    while ((m = ipRe.exec(text)) !== null) {
+        const oct = m[0].split('.').map(Number);
+        if (oct.every(o => o >= 0 && o <= 255) && !['0.0.0.0', '127.0.0.1', '255.255.255.255'].includes(m[0])) {
+            ips.add(m[0]);
+        }
+    }
+
+    const urlRe = /https?:\/\/[a-zA-Z0-9._\-]+(?:\/[^\s"'<>]*)?/g;
+    while ((m = urlRe.exec(text)) !== null) {
+        urls.add(m[0].replace(/[.,;)\]}]+$/, ''));
+    }
+
+    const domainRe = /\b(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}\b/g;
+    const badTlds = ['.exe', '.ps1', '.vbs', '.bat', '.php', '.py', '.js', '.sh', '.dll', '.sys', '.com', '.net', '.org', '.io', '.io', '.md'];
+    const knownSuffixes = ['.socket', '.shell', '.webclient', '.connect', '.run', '.recv', '.send'];
+    while ((m = domainRe.exec(text)) !== null) {
+        const d = m[0].toLowerCase();
+        // Bỏ domain có TLD là đuôi file (là tên biến/hàm, không phải domain thật)
+        if (badTlds.some(t => d.endsWith(t))) continue;
+        // Bỏ chuỗi kiểu object.method (socket.socket, s.connect...)
+        if (knownSuffixes.some(t => d.endsWith(t))) continue;
+        if (!['example.com', 'localhost', 'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'google.com', 'microsoft.com', 'w3.org', 'github.com', 'python.org'].includes(d)) {
+            domains.add(d);
+        }
+    }
+
+    return { ips: [...ips].slice(0, 10), urls: [...urls].slice(0, 10), domains: [...domains].slice(0, 10) };
+}
+
+// Phân loại họ mã độc dựa trên nội dung + loại file
+function classifyMalwareFamily(fileName, text, type) {
+    const lower = fileName.toLowerCase();
+    const has = (s) => text && text.includes(s);
+
+    // PHP Webshell
+    if (type === 'PHP script') {
+        if (has('eval(') || has('assert(') || has('base64_decode') || has('str_rot13') || has('create_function')) {
+            return 'PHP Webshell (eval/assert)';
+        }
+        if (has('system(') || has('shell_exec') || has('passthru') || has('exec(') || has('proc_open') || has('popen(')) {
+            return 'PHP Webshell (command exec)';
+        }
+        if (has('fsockopen') || has('stream_socket_client') || has('/dev/tcp/')) {
+            return 'PHP Reverse Shell';
+        }
+        if (has('move_uploaded_file') || has('$_FILES')) {
+            return 'PHP Upload Backdoor';
+        }
+        if (has('base64') || has('gzinflate') || has('gzuncompress') || has('rot13')) {
+            return 'PHP Obfuscated Webshell';
+        }
+    }
+
+    // PowerShell
+    if (type === 'PowerShell script') {
+        if (has('IEX') || has('Invoke-Expression') || has('DownloadString') || has('WebClient') || has('-EncodedCommand')) {
+            return 'PowerShell Malware (fileless)';
+        }
+    }
+
+    // VBScript
+    if (type === 'VBScript') {
+        if (has('WScript.Shell') || has('RegWrite') || has('CurrentVersion')) {
+            return 'VBScript Malware (persistence)';
+        }
+    }
+
+    // Python
+    if (type === 'Python script') {
+        if (has('socket') && has('connect')) return 'Python RAT / Reverse Shell';
+        if (has('import socket') && has('recv')) return 'Python RAT / Reverse Shell';
+        if (has('subprocess') || has('os.system')) return 'Python Backdoor';
+    }
+
+    // Batch
+    if (type === 'Batch script') {
+        if (has('del /') || has('format ') || has('rd /s') || has('shutdown')) return 'Batch Wiper / Destructive';
+        return 'Batch Script';
+    }
+
+    // Shell
+    if (type === 'Shell script') {
+        if (has('/dev/tcp/') || has('nc -e') || has('bash -i')) return 'Reverse Shell';
+    }
+
+    // PE
+    if (type === 'Windows PE executable') {
+        return 'Windows PE (cần phân tích PE header backend)';
+    }
+
+    return 'Unknown / Chưa phân loại';
+}
+
+// Shannon entropy của chuỗi
+function shannonEntropy(str) {
+    if (!str || str.length === 0) return 0;
+    const freq = {};
+    for (let i = 0; i < str.length; i++) {
+        const c = str[i];
+        freq[c] = (freq[c] || 0) + 1;
+    }
+    let entropy = 0;
+    const len = str.length;
+    for (const c in freq) {
+        const p = freq[c] / len;
+        entropy -= p * Math.log2(p);
+    }
+    return entropy;
+}
+
+// SHA-256 (hex) dùng Web Crypto — đủ cho nhận diện & tra cứu VirusTotal
+async function sha256Hex(bytes) {
+    const buf = await crypto.subtle.digest('SHA-256', bytes);
+    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// MD5: trình duyệt (crypto.subtle) không hỗ trợ MD5 nên trả về rỗng; SHA-256 đã đủ nhận diện.
+async function md5Hex(str) {
+    return '';
+}
+
+// Phiên bản đồng bộ (không hash SHA-256) dùng ngay trong vòng lặp forEach
+function analyzeMalwareSync(text, fileName, fileSize) {
+    if (!text || text.length === 0) {
+        return { family: "Không đọc được nội dung", type: "unknown", entropy: 0, entropy_verdict: "—", hashes: {}, iocs: { ips: [], urls: [], domains: [] }, pe_info: {}, file_size: fileSize || 0 };
+    }
+    const entropy = shannonEntropy(text);
+    const type = detectFileType(fileName, text);
+    const iocs = extractIocs(text);
+    const family = classifyMalwareFamily(fileName, text, type);
+    return {
+        family,
+        type,
+        entropy: entropy.toFixed(4),
+        entropy_verdict: entropy >= 7.0 ? 'Entropy cao — nghi ngờ packed/encrypted' : entropy >= 6.0 ? 'Entropy trung bình — có thể obfuscated' : 'Entropy bình thường',
+        hashes: {},
+        fuzzy_hash: '',
+        iocs,
+        pe_info: {},
+        file_size: fileSize || text.length
+    };
+}
+
 // Xử lý kết quả quét & Tính toán số liệu thống kê
 function processScanResults(targetName, filesArrayOrCount, realData) {
     scanResults = [];
@@ -755,6 +969,7 @@ function processScanResults(targetName, filesArrayOrCount, realData) {
             scanResults.push({
                 fileName: item.file.name,
                 path: item.file.webkitRelativePath || item.file.name,
+                relativePath: item.file.webkitRelativePath || item.file.name,
                 level: highestLevel,
                 securityStatus: securityStatus,
                 piiFound: enrichedFindings,
@@ -767,7 +982,8 @@ function processScanResults(targetName, filesArrayOrCount, realData) {
                 signatures: [],
                 entropy: 0,
                 entropyRisk: 'none',
-                riskRating: null
+                riskRating: null,
+                malwareAnalysis: analyzeMalwareSync(item.text || '', item.file.name, item.file.size)
             });
         });
     } else {

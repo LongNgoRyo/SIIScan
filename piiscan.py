@@ -298,14 +298,17 @@ class PIIScanner:
         }
         # Các phần mở rộng nhị phân KHÔNG thể đọc dưới dạng văn bản — sẽ bỏ qua
         # để tránh parse rác. Mọi thứ khác (kể cả file không đuôi) đều được quét.
+        # LƯU Ý: .exe/.dll/.sys được GIỮ LẠI để malware_analyzer phân tích PE header.
         self.binary_exts = {
             ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".ico", ".svg", ".webp",
             ".mp3", ".mp4", ".wav", ".avi", ".mov", ".mkv", ".flac", ".ogg",
             ".zip", ".gz", ".tar", ".rar", ".7z", ".jar", ".war", ".ear",
-            ".exe", ".dll", ".so", ".bin", ".dat", ".class", ".o", ".a",
+            ".so", ".bin", ".dat", ".o", ".a",
             ".woff", ".woff2", ".ttf", ".otf", ".eot", ".pdf_img",
             ".db", ".sqlite", ".sqlite3", ".pyc", ".pyo",
         }
+        # Các loại file thực thi / script cần phân tích mã độc (không bỏ qua)
+        self.executable_exts = {".exe", ".dll", ".sys", ".msi", ".com", ".scr", ".cpl"}
         
     def scan_directories(self):
         """Quét ĐỆ QUY toàn bộ thư mục, gồm cả file lạ/không đuôi.
@@ -402,6 +405,9 @@ class FileParser:
     def extract_lines(self, file_path):
         """Delegates reading to correct parser."""
         suffix = file_path.suffix.lower()
+        if suffix in {".exe", ".dll", ".sys", ".msi", ".com", ".scr", ".cpl", ".so", ".bin", ".class"}:
+            # File nhị phân: không đọc text (rác), sẽ phân tích PE qua malware_analyzer
+            return iter([])
         if suffix in {".pdf"}:
             return self.parse_pdf(file_path)
         elif suffix in {".docx"}:

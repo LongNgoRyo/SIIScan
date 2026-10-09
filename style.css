@@ -769,6 +769,12 @@ input { font-family: inherit; }
 .detail-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 24px; }
 .detail-card h4 { margin-bottom: 16px; color: var(--accent-primary); border-bottom: 1px solid var(--border-color); padding-bottom: 8px;}
 
+/* Malware Analysis Tab */
+.malware-analysis-content { display: flex; flex-direction: column; }
+.mal-ioc { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px; background: rgba(245, 158, 11, 0.06); border: 1px solid rgba(245, 158, 11, 0.15); border-radius: 4px; }
+.mal-ioc-lbl { font-weight: 700; font-size: 0.7rem; color: #F59E0B; text-transform: uppercase; letter-spacing: 0.5px; margin-right: 4px; }
+.mal-code { font-family: var(--font-mono, monospace); font-size: 0.7rem; color: var(--text-primary); background: rgba(0,0,0,0.25); padding: 2px 6px; border-radius: 3px; }
+
 /* ===== FEATURES ===== */
 .features-section { padding: 100px 24px; background: rgba(11, 15, 25, 0.5); border-top: 1px solid var(--border-color); }
 .features-container { max-width: 1200px; margin: 0 auto; }

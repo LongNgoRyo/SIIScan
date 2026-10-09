@@ -475,6 +475,7 @@ async function startLoading(targetName, filesArrayOrCount) {
                     updateScoreRing();
                     populateHashInfo();
                     populateQuickDetails();
+                    populateMalwareTab();
                     populateDetailTab();
                     populateComplianceTab();
                     renderDetailedGrid(scanResults);
@@ -931,6 +932,7 @@ function processScanResults(targetName, filesArrayOrCount, realData) {
     updateScoreRing();
     populateHashInfo();
     populateQuickDetails();
+    populateMalwareTab();
     populateDetailTab();
     populateComplianceTab();
     
@@ -1134,6 +1136,106 @@ function populateQuickDetails() {
     }
 
     table.innerHTML = html;
+}
+
+// Điền Tab Phân tích Mã độc (trọng tâm môn học)
+function populateMalwareTab() {
+    const content = document.getElementById('malwareContent');
+    if (!content) return;
+
+    const files = scanResults.filter(r => r.malwareAnalysis);
+    const hasData = files.length > 0;
+
+    if (!hasData) {
+        content.innerHTML = `<div class="detail-card" style="text-align:center; padding:40px; color:var(--text-secondary);">
+            <div style="font-size:3rem; margin-bottom:10px;">🦠</div>
+            <p style="font-weight:600; font-size:1.1rem;">Không có dữ liệu phân tích mã độc.</p>
+            <p style="font-size:0.85rem; color:var(--text-muted);">Hãy quét thư mục/tệp tin qua backend Python (nhập đường dẫn server) để nhận kết quả phân tích tĩnh chuyên sâu.</p>
+        </div>`;
+        return;
+    }
+
+    let cardsHtml = '';
+    files.forEach(res => {
+        const ma = res.malwareAnalysis;
+        const h = ma.hashes || {};
+        const ioc = ma.iocs || { ips: [], urls: [], domains: [] };
+        const pe = ma.pe_info || {};
+
+        // badge phân loại họ
+        const familyColor = ma.family.includes('RAT') || ma.family.includes('Reverse') ? '#F97316' : '#F87171';
+
+        let iocHtml = '';
+        if (ioc.ips.length) iocHtml += `<div class="mal-ioc"><span class="mal-ioc-lbl">IP (${ioc.ips.length})</span>${ioc.ips.map(x => `<code class="mal-code">${x}</code>`).join('')}</div>`;
+        if (ioc.urls.length) iocHtml += `<div class="mal-ioc"><span class="mal-ioc-lbl">URL (${ioc.urls.length})</span>${ioc.urls.map(x => `<code class="mal-code">${x}</code>`).join('')}</div>`;
+        if (ioc.domains.length) iocHtml += `<div class="mal-ioc"><span class="mal-ioc-lbl">Domain (${ioc.domains.length})</span>${ioc.domains.map(x => `<code class="mal-code">${x}</code>`).join('')}</div>`;
+        if (!iocHtml) iocHtml = `<div style="color:var(--text-muted); font-size:0.8rem;">Không phát hiện IoC.</div>`;
+
+        let peHtml = '';
+        if (Object.keys(pe).length) {
+            peHtml = `
+                <div style="margin-top:10px; padding:10px; background:rgba(96,165,250,0.06); border:1px solid rgba(96,165,250,0.2); border-radius:6px;">
+                    <span style="font-weight:700; color:#60A5FA; font-size:0.75rem; text-transform:uppercase;">PE Header</span>
+                    <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; font-size:0.72rem; font-family:var(--font-mono); color:var(--text-secondary);">
+                        ${pe.machine ? `<span>Kiến trúc: ${pe.machine}</span>` : ''}
+                        ${pe.sections_count ? `<span>Sections: ${pe.sections_count}</span>` : ''}
+                        ${pe.entry_point ? `<span>EP: ${pe.entry_point}</span>` : ''}
+                        ${pe.compile_time ? `<span>Compile: ${pe.compile_time}</span>` : ''}
+                        ${pe.packer_signs && pe.packer_signs.length ? `<span style="color:#F59E0B; font-weight:700;">⚠ Packer: ${pe.packer_signs[0]}</span>` : ''}
+                    </div>
+                    ${pe.suspicious_imports && pe.suspicious_imports.length ? `
+                    <div style="margin-top:6px; font-size:0.68rem; color:#F87171; font-family:var(--font-mono);">
+                        API đáng ngờ: ${pe.suspicious_imports.slice(0,8).join(', ')}
+                    </div>` : ''}
+                </div>`;
+        }
+
+        cardsHtml += `
+            <div class="detail-card" style="margin-bottom:16px;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px;">
+                    <div>
+                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                            <span style="font-size:1.2rem;">🦠</span>
+                            <span style="font-weight:700; font-size:1rem; color:var(--text-primary);">${res.relativePath || res.fileName}</span>
+                        </div>
+                        <div style="margin-top:6px; display:flex; flex-wrap:wrap; gap:6px;">
+                            <span style="display:inline-flex; align-items:center; gap:4px; background:rgba(239,68,68,0.13); color:${familyColor}; border:1px solid rgba(239,68,68,0.3); padding:2px 10px; border-radius:4px; font-size:0.72rem; font-weight:700;">${ma.family}</span>
+                            <span style="font-size:0.7rem; color:var(--text-muted); font-family:var(--font-mono); padding:2px 6px; border:1px solid var(--border-color); border-radius:4px;">${ma.type}</span>
+                            <span style="font-size:0.7rem; color:var(--text-muted); font-family:var(--font-mono); padding:2px 6px; border:1px solid var(--border-color); border-radius:4px;">${(ma.file_size/1024).toFixed(1)} KB</span>
+                        </div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:0.7rem; color:var(--text-muted);">Entropy</div>
+                        <div style="font-size:1.4rem; font-weight:800; font-family:var(--font-mono); color:${ma.entropy >= 7 ? '#F87171' : ma.entropy >= 6 ? '#F59E0B' : '#10B981'};">${ma.entropy}</div>
+                        <div style="font-size:0.65rem; color:var(--text-muted); max-width:160px;">${ma.entropy_verdict}</div>
+                    </div>
+                </div>
+
+                <div style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:0.7rem; font-family:var(--font-mono);">
+                    <div><span style="color:var(--text-muted);">MD5:</span> <code style="color:var(--text-primary);" title="${h.md5}">${h.md5 || '—'}</code></div>
+                    <div><span style="color:var(--text-muted);">SHA-1:</span> <code style="color:var(--text-primary);" title="${h.sha1}">${h.sha1 || '—'}</code></div>
+                    <div><span style="color:var(--text-muted);">SHA-256:</span> <code style="color:var(--text-primary);" title="${h.sha256}">${h.sha256 || '—'}</code></div>
+                    <div><span style="color:var(--text-muted);">Fuzzy:</span> <code style="color:var(--text-muted);" title="${ma.fuzzy_hash}">${ma.fuzzy_hash ? ma.fuzzy_hash.slice(0, 40) + '…' : '—'}</code></div>
+                </div>
+
+                ${peHtml}
+
+                <div style="margin-top:12px;">
+                    <div style="font-weight:600; color:#F59E0B; font-size:0.78rem; margin-bottom:6px;">🎯 IoCs (Indicators of Compromise)</div>
+                    <div style="display:flex; flex-direction:column; gap:6px;">${iocHtml}</div>
+                </div>
+            </div>`;
+    });
+
+    content.innerHTML = `
+        <div style="margin-bottom:16px; display:flex; align-items:center; gap:10px;">
+            <span style="font-size:1.5rem;">🦠</span>
+            <div>
+                <div style="font-weight:700; font-size:1.05rem; color:var(--text-primary);">Phân tích Mã độc Tĩnh</div>
+                <div style="font-size:0.8rem; color:var(--text-secondary);">${files.length} tệp tin được phân tích — hash, entropy, PE header, IoC và phân loại họ mã độc.</div>
+            </div>
+        </div>
+        ${cardsHtml}`;
 }
 
 // Điền Tab 2: Phân tích & Phân bổ dữ liệu cá nhân

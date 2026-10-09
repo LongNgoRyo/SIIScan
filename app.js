@@ -230,6 +230,12 @@ const getApiUrl = (endpoint) => {
     return endpoint;
 };
 
+// Kiểm tra có nên gọi backend local Python hay không (chỉ gọi khi mở local/file)
+const isBackendReachable = () => {
+    const h = window.location.hostname;
+    return (h === '' || h === 'localhost' || h === '127.0.0.1');
+};
+
 // ===== INITIALIZATION =====
 document.addEventListener('DOMContentLoaded', () => {
     initTabs();
@@ -423,72 +429,78 @@ async function startLoading(targetName, filesArrayOrCount) {
         processScanResults(targetName, filesArrayOrCount, scannedData);
         showResults();
     } else {
-        // Attempt to run a real server-side scan via the local Python API
-        try {
-            progressFill.style.width = '10%';
-            loadingStatus.textContent = 'Connecting to local API server...';
-            engineTicker.textContent = `Target Directory: ${targetName}`;
-            
-            const response = await fetch(getApiUrl('/api/scan/path'), {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-apikey': 'default_key'
-                },
-                body: JSON.stringify({ path: targetName })
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                if (data && data.success) {
-                    progressFill.style.width = '100%';
-                    loadingStatus.textContent = 'Audit complete. Loading findings...';
-                    await new Promise(r => setTimeout(r, 400));
-                    
-                    // Populate results from real backend python engine
-                    scanResults = data.results;
-                    scanStats = {
-                        high: data.stats.high,
-                        medium: data.stats.medium,
-                        low: data.stats.low,
-                        totalFiles: data.stats.totalFiles,
-                        filesWithPii: data.stats.filesWithPii,
-                        securedFiles: data.stats.totalFiles - data.stats.filesWithPii
-                    };
-                    
-                    // Update dashboard meta
-                    document.getElementById('resultFileName').textContent = targetName;
-                    document.getElementById('metaSize').textContent = `${data.stats.totalFiles} files audited`;
-                    document.getElementById('metaType').textContent = "Server Directory";
-                    document.getElementById('metaDate').textContent = new Date().toISOString().split('T')[0];
-                    
-                    const tagsDiv = document.getElementById('fileTags');
-                    if (tagsDiv) {
-                        tagsDiv.innerHTML = '';
-                        if (data.stats.high > 0) {
-                            tagsDiv.innerHTML += `<span class="tag malware" style="background: rgba(239, 68, 68, 0.15); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3);">High Risk</span>`;
-                        } else if (data.stats.medium > 0) {
-                            tagsDiv.innerHTML += `<span class="tag warning" style="background: rgba(245, 158, 11, 0.15); color: #F59E0B; border: 1px solid rgba(245, 158, 11, 0.3);">Warning</span>`;
-                        } else {
-                            tagsDiv.innerHTML += `<span class="tag clean" style="background: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.3);">Secure</span>`;
+        // Chỉ thử backend local Python khi mở trang từ localhost/file: (chạy piiscan.py)
+        if (isBackendReachable()) {
+            try {
+                progressFill.style.width = '10%';
+                loadingStatus.textContent = 'Connecting to local API server...';
+                engineTicker.textContent = `Target Directory: ${targetName}`;
+
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 3000);
+                const response = await fetch(getApiUrl('/api/scan/path'), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-apikey': 'default_key'
+                    },
+                    body: JSON.stringify({ path: targetName }),
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data && data.success) {
+                        progressFill.style.width = '100%';
+                        loadingStatus.textContent = 'Audit complete. Loading findings...';
+                        await new Promise(r => setTimeout(r, 400));
+
+                        // Populate results from real backend python engine
+                        scanResults = data.results;
+                        scanStats = {
+                            high: data.stats.high,
+                            medium: data.stats.medium,
+                            low: data.stats.low,
+                            totalFiles: data.stats.totalFiles,
+                            filesWithPii: data.stats.filesWithPii,
+                            securedFiles: data.stats.totalFiles - data.stats.filesWithPii
+                        };
+
+                        // Update dashboard meta
+                        document.getElementById('resultFileName').textContent = targetName;
+                        document.getElementById('metaSize').textContent = `${data.stats.totalFiles} files audited`;
+                        document.getElementById('metaType').textContent = "Server Directory";
+                        document.getElementById('metaDate').textContent = new Date().toISOString().split('T')[0];
+
+                        const tagsDiv = document.getElementById('fileTags');
+                        if (tagsDiv) {
+                            tagsDiv.innerHTML = '';
+                            if (data.stats.high > 0) {
+                                tagsDiv.innerHTML += `<span class="tag malware" style="background: rgba(239, 68, 68, 0.15); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3);">High Risk</span>`;
+                            } else if (data.stats.medium > 0) {
+                                tagsDiv.innerHTML += `<span class="tag warning" style="background: rgba(245, 158, 11, 0.15); color: #F59E0B; border: 1px solid rgba(245, 158, 11, 0.3);">Warning</span>`;
+                            } else {
+                                tagsDiv.innerHTML += `<span class="tag clean" style="background: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.3);">Secure</span>`;
+                            }
+                            tagsDiv.innerHTML += `<span class="tag">PII Scan</span>`;
                         }
-                        tagsDiv.innerHTML += `<span class="tag">PII Scan</span>`;
+
+                        updateScoreRing();
+                        populateHashInfo();
+                        populateQuickDetails();
+                        populateMalwareTab();
+                        populateDetailTab();
+                        populateComplianceTab();
+                        renderDetailedGrid(scanResults);
+
+                        showResults();
+                        return;
                     }
-                    
-                    updateScoreRing();
-                    populateHashInfo();
-                    populateQuickDetails();
-                    populateMalwareTab();
-                    populateDetailTab();
-                    populateComplianceTab();
-                    renderDetailedGrid(scanResults);
-                    
-                    showResults();
-                    return;
                 }
+            } catch (err) {
+                console.warn("Local API server not running or unreachable. Falling back to browser simulation.", err);
             }
-        } catch (err) {
-            console.warn("Local API server not running or unreachable. Falling back to browser simulation.", err);
         }
 
         // MOCK GENERATOR FOR SERVER PATH (FALLBACK)

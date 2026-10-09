@@ -1014,10 +1014,56 @@ function decodePayload(text) {
     return decoded;
 }
 
+// Mô tả chuỗi tấn công (attack chain) để giải thích rõ cách mã độc hoạt động
+function buildAttackChain(text, type, family, decoded_payloads) {
+    const chain = [];
+    const has = (s) => text && text.includes(s);
+
+    if (type === 'PHP script') {
+        if (has('$_POST') || has('$_GET') || has('$_REQUEST')) {
+            chain.push('1. Nguồn input: hacker gửi lệnh qua $_POST/$_GET/$_REQUEST (tham số HTTP).');
+        }
+        if (decoded_payloads && decoded_payloads.length) {
+            decoded_payloads.forEach(dp => {
+                chain.push(`2. Giải mã: ${dp.type}() khôi phục payload "${dp.decoded}" đang bị che giấu.`);
+                // Nhận diện lệnh độc ngay trong payload đã giải
+                if (dp.decoded.includes('shell_exec')) chain.push('3. Lệnh độc: payload giải mã chứa shell_exec → thực thi lệnh hệ thống.');
+                if (dp.decoded.includes('system')) chain.push('3. Lệnh độc: payload giải mã chứa system → thực thi lệnh hệ thống.');
+                if (dp.decoded.includes('eval')) chain.push('3. Lệnh độc: payload giải mã chứa eval → thực thi mã động.');
+            });
+        }
+        if (has('eval(')) chain.push('3. Thực thi: eval() chạy chuỗi như mã PHP (điểm RCE).');
+        if (has('assert(')) chain.push('3. Thực thi: assert() chạy biểu thức động (điểm RCE).');
+        if (has('system(') || has('shell_exec') || has('passthru') || has('exec(') || has('proc_open') || has('popen(')) {
+            chain.push('4. Kết quả: lệnh hệ thống được chạy trên server → hacker chiếm quyền điều khiển.');
+        }
+        if (has('fsockopen') || has('stream_socket_client') || has('/dev/tcp/')) {
+            chain.push('4. Kết nối: mở socket reverse shell về máy hacker để duy trì quyền truy cập.');
+        }
+        if (has('move_uploaded_file') || has('$_FILES')) {
+            chain.push('4. Upload: di chuyển file tấn công lên server → tạo backdoor mới.');
+        }
+        if (chain.length === 0) chain.push('1. Mã chứa lệnh thực thi tiềm ẩn, cần phân tích sâu thêm.');
+    } else if (type === 'PowerShell script') {
+        chain.push('1. Tải payload: DownloadString/WebClient tải mã độc từ URL từ xa.');
+        chain.push('2. Thực thi: IEX (Invoke-Expression) chạy payload trong bộ nhớ (fileless).');
+        chain.push('3. Hệ quả: không ghi file xuống đĩa → khó bị phát hiện.');
+    } else if (type === 'VBScript') {
+        chain.push('1. Khởi động: WScript.Shell tương tác hệ thống.');
+        chain.push('2. Persistence: ghi registry Run key để tự chạy mỗi lần khởi động.');
+    } else if (type === 'Python script') {
+        chain.push('1. Kết nối C2: socket.connect() kết nối về máy điều khiển của hacker.');
+        chain.push('2. Nhận lệnh: recv() nhận lệnh từ C2.');
+        chain.push('3. Thực thi: subprocess/os.system chạy lệnh trên máy nạn nhân.');
+    }
+
+    return chain;
+}
+
 // Phiên bản đồng bộ (dùng hash SHA-256 đã tính trước nếu có) gọi trong vòng lặp forEach
 function analyzeMalwareSync(text, fileName, fileSize, precomputedSha256) {
     if (!text || text.length === 0) {
-        return { family: "Không đọc được nội dung", type: "unknown", entropy: 0, entropy_verdict: "—", hashes: { md5: '', sha1: '', sha256: '' }, iocs: { ips: [], urls: [], domains: [] }, pe_info: {}, evidence: [], decoded_payloads: [], file_size: fileSize || 0 };
+        return { family: "Không đọc được nội dung", type: "unknown", entropy: 0, entropy_verdict: "—", hashes: { md5: '', sha1: '', sha256: '' }, iocs: { ips: [], urls: [], domains: [] }, pe_info: {}, evidence: [], decoded_payloads: [], attack_chain: [], file_size: fileSize || 0 };
     }
     const entropy = shannonEntropy(text);
     const type = detectFileType(fileName, text);
@@ -1025,6 +1071,7 @@ function analyzeMalwareSync(text, fileName, fileSize, precomputedSha256) {
     const family = classifyMalwareFamily(fileName, text, type);
     const evidence = detectMalwareEvidence(text, fileName, type);
     const decoded_payloads = decodePayload(text);
+    const attack_chain = buildAttackChain(text, type, family, decoded_payloads);
     return {
         family,
         type,
@@ -1036,6 +1083,7 @@ function analyzeMalwareSync(text, fileName, fileSize, precomputedSha256) {
         pe_info: {},
         evidence,
         decoded_payloads,
+        attack_chain,
         file_size: fileSize || text.length
     };
 }
@@ -1632,6 +1680,18 @@ function populateMalwareTab() {
                     <div style="font-weight:600; color:#F59E0B; font-size:0.78rem; margin-bottom:6px;">🎯 IoCs (Indicators of Compromise)</div>
                     <div style="display:flex; flex-direction:column; gap:6px;">${iocHtml}</div>
                 </div>
+
+                ${ma.attack_chain && ma.attack_chain.length ? `
+                <div style="margin-top:12px;">
+                    <div style="font-weight:600; color:#8B5CF6; font-size:0.78rem; margin-bottom:6px;">⚔️ Luồng tấn công (cách mã độc hoạt động)</div>
+                    <div style="display:flex; flex-direction:column; gap:5px;">
+                        ${ma.attack_chain.map(step => `
+                        <div style="display:flex; align-items:flex-start; gap:8px; padding:6px 10px; background:rgba(139,92,246,0.07); border:1px solid rgba(139,92,246,0.2); border-radius:5px; font-size:0.74rem; color:var(--text-secondary); line-height:1.45;">
+                            <span style="color:#8B5CF6; font-weight:700; flex-shrink:0;">▸</span>
+                            <span>${step}</span>
+                        </div>`).join('')}
+                    </div>
+                </div>` : ''}
             </div>`;
     });
 

@@ -2183,7 +2183,7 @@ function exportReport() {
         </style>
 
         <!-- TRANG BÌA (COVER PAGE) -->
-        <div class="pdf-page" style="height: 1040px; display: flex; flex-direction: column; justify-content: space-between; border: 15px solid #1E3A8A; padding: 60px 80px;">
+        <div class="pdf-page" style="min-height: 1120px; display: flex; flex-direction: column; justify-content: space-between; border: 15px solid #1E3A8A; padding: 60px 80px;">
             <div style="text-align: center; margin-top: 50px;">
                 <div style="font-size: 4.5rem; margin-bottom: 20px;">🛡️</div>
                 <h1 style="font-size: 2.1rem; font-weight: 800; color: #1E3A8A; line-height: 1.3; margin: 0 0 10px 0; letter-spacing: -0.5px;">BÁO CÁO KIỂM TOÁN AN TOÀN THÔNG TIN &</h1>
@@ -2227,7 +2227,7 @@ function exportReport() {
         <div class="html2pdf__page-break"></div>
 
         <!-- TRANG 2: TỔNG QUAN KẾT QUẢ VÀ HÀNH CHÍNH -->
-        <div class="pdf-page" style="height: 1040px;">
+        <div class="pdf-page" style="height: 1120px;">
             <div class="pdf-header">
                 <h2>PIIScan Server Pro</h2>
                 <span style="font-size: 0.8rem; color: #6B7280;">Báo cáo kiểm toán tuân thủ bảo vệ dữ liệu cá nhân</span>
@@ -2318,7 +2318,7 @@ function exportReport() {
         <div class="html2pdf__page-break"></div>
 
         <!-- TRANG 3: MÔ TẢ CHI TIẾT 14 LOẠI LỖ HỔNG / RỦI RO PHÁT HIỆN -->
-        <div class="pdf-page" style="height: 1040px;">
+        <div class="pdf-page" style="height: 1120px;">
             <div class="pdf-header">
                 <h2>PIIScan Server Pro</h2>
                 <span style="font-size: 0.8rem; color: #6B7280;">Báo cáo kiểm toán tuân thủ bảo vệ dữ liệu cá nhân</span>
@@ -2342,7 +2342,7 @@ function exportReport() {
         <div class="html2pdf__page-break"></div>
 
         <!-- TRANG 4: DANH SÁCH FILE VÀ ĐỀ XUẤT HÀNH ĐỘNG -->
-        <div class="pdf-page" style="height: 1040px;">
+        <div class="pdf-page" style="height: 1120px;">
             <div class="pdf-header">
                 <h2>PIIScan Server Pro</h2>
                 <span style="font-size: 0.8rem; color: #6B7280;">Báo cáo kiểm toán tuân thủ bảo vệ dữ liệu cá nhân</span>
@@ -2399,7 +2399,7 @@ function exportReport() {
         <!-- TRANG 5: TRÍCH ĐOẠN MÃ NGUỒN CHỨA LỆNH NGUY HIỂM -->
         ${codeSnippetsHtml ? `
         <div class="html2pdf__page-break"></div>
-        <div class="pdf-page" style="height: 1040px;">
+        <div class="pdf-page" style="height: 1120px;">
             <div class="pdf-header">
                 <h2>PIIScan Server Pro</h2>
                 <span style="font-size: 0.8rem; color: #6B7280;">Báo cáo kiểm toán tuân thủ bảo vệ dữ liệu cá nhân</span>
@@ -2430,7 +2430,7 @@ function exportReport() {
         filename:     `Bao_cao_Kiem_toan_Bao_mat_Du_lieu_${new Date().toISOString().split('T')[0]}.pdf`,
         image:        { type: 'jpeg', quality: 0.98 },
         html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
-        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+        jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
     };
 
     // Tạo PDF

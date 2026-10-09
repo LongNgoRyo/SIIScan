@@ -413,8 +413,13 @@ async function startLoading(targetName, filesArrayOrCount) {
             loadingStatus.textContent = `Analyzing ${i + 1}/${fileCount}: ${file.name}`;
             engineTicker.textContent = `Extracting patterns: ${file.name}...`;
             
-            const findings = await scanFileContent(file);
+            let findings = [];
             let fileText = '';
+            try {
+                findings = await scanFileContent(file);
+            } catch (e) {
+                console.warn("Loi quet file", file.name, e);
+            }
             try { fileText = await readFileAsText(file); } catch (e) { fileText = ''; }
             scannedData.push({
                 file: file,
@@ -426,7 +431,11 @@ async function startLoading(targetName, filesArrayOrCount) {
         progressFill.style.width = '100%';
         loadingStatus.textContent = `Scan complete. Generating compliance report...`;
         await new Promise(r => setTimeout(r, 500));
-        processScanResults(targetName, filesArrayOrCount, scannedData);
+        try {
+            processScanResults(targetName, filesArrayOrCount, scannedData);
+        } catch (e) {
+            console.error("Loi xuat ket qua:", e);
+        }
         showResults();
     } else {
         // Chỉ thử backend local Python khi mở trang từ localhost/file: (chạy piiscan.py)
@@ -568,8 +577,12 @@ async function scanFileContent(file) {
                     let matches = [];
                     if (pattern.global) {
                         let match;
+                        let guard = 0;
                         while ((match = pattern.exec(lineContent)) !== null) {
                             matches.push(match[0]);
+                            // Chống vòng lặp vô hạn (zero-width match)
+                            if (match[0].length === 0) { pattern.lastIndex++; if (pattern.lastIndex > lineContent.length) break; }
+                            if (++guard > 5000) break;
                         }
                     } else {
                         const m = lineContent.match(pattern);
@@ -671,10 +684,17 @@ async function scanFileContent(file) {
 
 function readFileAsText(file) {
     return new Promise((resolve, reject) => {
+        let settled = false;
         const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsText(file.slice(0, 150000)); // Đọc tối đa 150KB đầu tiên
+        reader.onload = () => { settled = true; resolve(reader.result); };
+        reader.onerror = (e) => { settled = true; reject(e); };
+        // Timeout an toàn, tránh treo vô hạn nếu FileReader không fire
+        setTimeout(() => { if (!settled) { settled = true; resolve(''); } }, 5000);
+        try {
+            reader.readAsText(file.slice(0, 150000)); // Đọc tối đa 150KB đầu tiên
+        } catch (e) {
+            if (!settled) { settled = true; resolve(''); }
+        }
     });
 }
 

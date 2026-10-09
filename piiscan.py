@@ -10,6 +10,12 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 
+# Webshell/backdoor detector nâng cao (dựa trên pattern GitHub: php-malware-finder, Panelica, webshell-analyzer)
+try:
+    from webshell_detector import detect_malware
+except ImportError:
+    detect_malware = None
+
 # Try importing parsing and data libraries, with fallback
 try:
     import pandas as pd
@@ -56,7 +62,9 @@ PII_PATTERNS = {
         re.IGNORECASE
     ),
     "Thông tin xác thực / API Key / Mật khẩu": re.compile(
-        r"(?:password|passwd|pwd|secret|db_pass|access_token|apikey|api_key|token)\s*[:=]\s*['\"]?([A-Za-z0-9_@#$%-]{4,})['\"]?",
+        r"(?<![\w.])"
+        r"(?:password|passwd|pwd|secret|db_pass|access_token|apikey|api_key|token)\s*[:=]\s*['\"]?"
+        r"((?!placeholder|your_|todo|my_secure_|document\b)[A-Za-z0-9_@#$%-]{4,})['\"]?",
         re.IGNORECASE
     ),
     "Hồ sơ y tế / Thông tin sức khỏe": re.compile(
@@ -223,7 +231,12 @@ class PIIScanner:
     def __init__(self, target_path, exclude_dirs=None):
         self.target_path = Path(target_path)
         self.exclude_dirs = exclude_dirs or [".git", "node_modules", "venv", ".idea"]
-        self.supported_exts = {".txt", ".csv", ".log", ".json", ".xml", ".pdf", ".docx", ".xlsx", ".env", ".config", ".yaml", ".yml", ".php", ".js", ".py", ".sql"}
+        self.supported_exts = {
+            ".txt", ".csv", ".log", ".json", ".xml", ".pdf", ".docx", ".xlsx",
+            ".env", ".config", ".yaml", ".yml", ".ini", ".conf",
+            ".php", ".phtml", ".php3", ".php4", ".php5", ".js", ".jsx", ".ts", ".py", ".sql",
+            ".asp", ".aspx", ".jsp", ".jspx", ".sh", ".pl", ".cgi", ".rb",
+        }
         
     def scan_directories(self):
         """Recursively yields files in the target directory."""
@@ -343,6 +356,27 @@ class PIIAnalyzer:
                 continue
                 
             for pii_type, pattern in PII_PATTERNS.items():
+                # === Mã độc: dùng detector nâng cao (giải mã + danh sách hàm mở rộng) ===
+                if pii_type == "Mã độc & Lệnh nguy hiểm (Webshell/Backdoor)":
+                    if detect_malware is not None:
+                        for value, reason in detect_malware(cleaned_line):
+                            findings.append({
+                                "type": pii_type,
+                                "value": value,
+                                "line": line_num,
+                                "context": cleaned_line[:100] + ("..." if len(cleaned_line) > 100 else "")
+                            })
+                    # Vẫn quét regex gốc làm dự phòng nếu module không nạp được
+                    else:
+                        for match in pattern.finditer(cleaned_line):
+                            findings.append({
+                                "type": pii_type,
+                                "value": match.group(0).strip(),
+                                "line": line_num,
+                                "context": cleaned_line[:100] + ("..." if len(cleaned_line) > 100 else "")
+                            })
+                    continue
+                
                 for match in pattern.finditer(cleaned_line):
                     # Lấy group(1) nếu có capture group và pii_type là Thông tin xác thực hoặc Cookie phiên
                     if pii_type in ["Thông tin xác thực / API Key / Mật khẩu", "Cookie phiên"] and match.lastindex is not None and match.lastindex >= 1:

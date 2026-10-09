@@ -16,6 +16,12 @@ try:
 except ImportError:
     detect_malware = None
 
+# Chấm điểm CVSS 3.1 + phân loại + CWE cho mã độc
+try:
+    from cvss_scoring import classify_finding, get_profile, compute_cvss_from_vector, severity_from_score
+except ImportError:
+    classify_finding = get_profile = compute_cvss_from_vector = severity_from_score = None
+
 # Try importing parsing and data libraries, with fallback
 try:
     import pandas as pd
@@ -373,12 +379,26 @@ class PIIAnalyzer:
                 if pii_type == "Mã độc & Lệnh nguy hiểm (Webshell/Backdoor)":
                     if detect_malware is not None:
                         for value, reason in detect_malware(cleaned_line):
-                            findings.append({
+                            finding = {
                                 "type": pii_type,
                                 "value": value,
                                 "line": line_num,
                                 "context": cleaned_line[:100] + ("..." if len(cleaned_line) > 100 else "")
-                            })
+                            }
+                            # Gắn thêm CVSS + CWE + phân loại mã độc
+                            if classify_finding is not None and get_profile is not None:
+                                prof_key = classify_finding(reason)
+                                profile = get_profile(prof_key)
+                                if profile:
+                                    finding["profile"] = prof_key
+                                    finding["malware_name"] = profile["name"]
+                                    finding["cwe"] = profile["cwe"]
+                                    finding["cwe_id"] = profile["cwe_id"]
+                                    finding["cvss_vector"] = profile["vector"]
+                                    finding["cvss_score"] = profile["score"]
+                                    finding["cvss_severity"] = profile["severity"]
+                                    finding["reason"] = reason
+                            findings.append(finding)
                     # Vẫn quét regex gốc làm dự phòng nếu module không nạp được
                     else:
                         for match in pattern.finditer(cleaned_line):
@@ -525,10 +545,10 @@ class ReportGenerator:
             import csv
             with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
                 writer = csv.writer(f)
-                writer.writerow(["Đường dẫn tệp", "Định dạng", "Mức độ nhạy cảm", "Quyền hạn tệp", "Trạng thái bảo mật", "Loại rủi ro phát hiện", "Giá trị trùng khớp", "Dòng", "Đề xuất khắc phục"])
+                writer.writerow(["Đường dẫn tệp", "Định dạng", "Mức độ nhạy cảm", "Quyền hạn tệp", "Trạng thái bảo mật", "Loại rủi ro phát hiện", "Giá trị trùng khớp", "Dòng", "CWE", "Điểm CVSS", "Mức CVSS", "Đề xuất khắc phục"])
                 for r in self.results:
                     if not r["findings"]:
-                        writer.writerow([r["file_path"], r["format"], "An toàn", r["permissions"], "Tuân thủ", "Không có", "N/A", "N/A", "Không cần hành động."])
+                        writer.writerow([r["file_path"], r["format"], "An toàn", r["permissions"], "Tuân thủ", "Không có", "N/A", "N/A", "N/A", "N/A", "N/A", "Không cần hành động."])
                     for f in r["findings"]:
                         writer.writerow([
                             r["file_path"],
@@ -539,6 +559,9 @@ class ReportGenerator:
                             f["type"],
                             f["value"],
                             f["line"],
+                            f.get("cwe_id", "N/A"),
+                            f.get("cvss_score", "N/A"),
+                            f.get("cvss_severity", "N/A"),
                             r["compliance"]["remediation"]
                         ])
             print(f"Bao cao CSV da duoc luu (Standard Fallback) tai: {output_path}")
@@ -557,6 +580,9 @@ class ReportGenerator:
                     "Loại rủi ro phát hiện": "Không có",
                     "Giá trị trùng khớp": "N/A",
                     "Dòng": "N/A",
+                    "CWE": "N/A",
+                    "Điểm CVSS": "N/A",
+                    "Mức CVSS": "N/A",
                     "Đề xuất khắc phục": "Không cần hành động."
                 })
             for f in r["findings"]:
@@ -569,6 +595,9 @@ class ReportGenerator:
                     "Loại rủi ro phát hiện": f["type"],
                     "Giá trị trùng khớp": f["value"],
                     "Dòng": f["line"],
+                    "CWE": f.get("cwe_id", "N/A"),
+                    "Điểm CVSS": f.get("cvss_score", "N/A"),
+                    "Mức CVSS": f.get("cvss_severity", "N/A"),
                     "Đề xuất khắc phục": r["compliance"]["remediation"]
                 })
                 
@@ -1246,6 +1275,9 @@ class PIIScanAPIHandler(BaseHTTPRequestHandler):
                 
                 # Deduplicate and group findings by PII type
                 grouped_pii = {}
+                file_cvss_score = 0.0
+                file_cvss_severity = None
+                file_cvss_vector = None
                 for f in findings:
                     t = f["type"]
                     if t not in grouped_pii:
@@ -1253,8 +1285,21 @@ class PIIScanAPIHandler(BaseHTTPRequestHandler):
                     grouped_pii[t].append({
                         "line": f["line"],
                         "text": f["context"],
-                        "value": f["value"]
+                        "value": f["value"],
+                        "cwe_id": f.get("cwe_id", ""),
+                        "cwe": f.get("cwe", ""),
+                        "malware_name": f.get("malware_name", ""),
+                        "reason": f.get("reason", ""),
+                        "cvss_score": f.get("cvss_score"),
+                        "cvss_severity": f.get("cvss_severity", ""),
+                        "cvss_vector": f.get("cvss_vector", ""),
                     })
+                    # Theo dõi CVSS cao nhất của file
+                    if f.get("cvss_score") is not None:
+                        if file_cvss_score < f["cvss_score"]:
+                            file_cvss_score = f["cvss_score"]
+                            file_cvss_severity = f.get("cvss_severity")
+                            file_cvss_vector = f.get("cvss_vector")
                 
                 pii_found_list = []
                 for pii_name, details in grouped_pii.items():
@@ -1286,6 +1331,11 @@ class PIIScanAPIHandler(BaseHTTPRequestHandler):
                     "permissions": eval_result["permissions"],
                     "size": f"{os.path.getsize(file_path)/1024:.1f} KB" if os.path.exists(file_path) else "0 KB",
                     "date": datetime.datetime.fromtimestamp(os.path.getmtime(file_path)).strftime('%Y-%m-%d') if os.path.exists(file_path) else "",
+                    "cvss": {
+                        "score": file_cvss_score,
+                        "severity": file_cvss_severity,
+                        "vector": file_cvss_vector,
+                    },
                     "piiFound": pii_found_list
                 })
                 

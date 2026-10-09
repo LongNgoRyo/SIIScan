@@ -51,6 +51,20 @@ function isValidLuhn(numberStr) {
     return sum % 10 === 0;
 }
 
+// Render badge CVSS theo mức độ nghiêm trọng
+function cvssBadge(score, severity, vector) {
+    if (score === undefined || score === null || score === 0) return '';
+    const sev = severity || 'None';
+    const colorMap = {
+        'Critical': '#EF4444', 'High': '#F97316', 'Medium': '#F59E0B', 'Low': '#10B981', 'None': '#6B7280'
+    };
+    const color = colorMap[sev] || '#6B7280';
+    const title = vector ? `Vector: ${vector}` : '';
+    return `<span class="cvss-badge" title="${title}" style="display:inline-flex; align-items:center; gap:6px; background:${color}22; color:${color}; border:1px solid ${color}55; padding:3px 10px; border-radius:99px; font-size:0.75rem; font-weight:700; font-family:var(--font-mono);">
+        <span style="letter-spacing:0.5px;">CVSS</span> ${score} <span style="font-weight:600;">— ${sev}</span>
+    </span>`;
+}
+
 // Hàm ẩn dữ liệu nhạy cảm để hiển thị an toàn
 function maskPIIValue(type, value) {
     if (!value) return "";
@@ -1315,6 +1329,7 @@ function renderDetailedGrid(results) {
                         <span>Quyền hạn: ${res.permissions}</span>
                         <span>Dung lượng: ${res.size}</span>
                     </div>
+                    ${res.cvss && res.cvss.score ? `<div style="margin-top:8px;">${cvssBadge(res.cvss.score, res.cvss.severity, res.cvss.vector)}</div>` : ''}
                 </div>
                 <div style="display: flex; align-items: center; gap: 12px;">
                     <div class="pii-file-status">
@@ -1337,6 +1352,8 @@ function renderDetailedGrid(results) {
                                 <span class="pii-badge ${p.level}" style="margin: 0; padding: 1px 6px; font-size: 0.7rem;">${p.name}</span>
                             </td>
                             <td style="padding: 8px 6px; font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-primary);">${maskPIIValue(p.name, det.value)}</td>
+                            <td style="padding: 8px 6px; font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-secondary);">${det.cwe_id || '—'}</td>
+                            <td style="padding: 8px 6px;">${det.cvss_score ? cvssBadge(det.cvss_score, det.cvss_severity, det.cvss_vector) : '—'}</td>
                             <td style="padding: 8px 6px; font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 350px;" title="${det.text.replace(/"/g, '&quot;')}">${det.text}</td>
                         </tr>
                     `;
@@ -1358,6 +1375,8 @@ function renderDetailedGrid(results) {
                                     <th style="padding: 6px; font-weight: 600; width: 60px;">Dòng</th>
                                     <th style="padding: 6px; font-weight: 600; width: 120px;">Loại dữ liệu</th>
                                     <th style="padding: 6px; font-weight: 600; width: 180px;">Giá trị phát hiện</th>
+                                    <th style="padding: 6px; font-weight: 600; width: 70px;">CWE</th>
+                                    <th style="padding: 6px; font-weight: 600; width: 130px;">CVSS</th>
                                     <th style="padding: 6px; font-weight: 600;">Ngữ cảnh phát hiện</th>
                                 </tr>
                             </thead>

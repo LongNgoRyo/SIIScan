@@ -10,9 +10,11 @@ https://longngoryo.github.io/SIIScan/
 
 - Quét đệ quy thư mục máy chủ, tệp cấu hình, nhật ký, mã nguồn
 - Phát hiện webshell/backdoor (PHP, Python, JS, ASP, JSP, Shell...) bằng module `webshell_detector.py` với khả năng giải mã obfuscation (base64, rot13, hex, gzip, XOR, nối chuỗi)
+- **Chấm điểm CVSS 3.1** (0.0–10.0) cho từng lỗ hổng mã độc theo chuẩn FIRST.org, kèm vector CVSS và mức độ (None/Low/Medium/High/Critical)
+- **Phân loại mã độc** chi tiết (webshell RCE, command execution, reverse shell, RFI, obfuscation, lỗ hổng upload...) + **ánh xạ mã CWE** (CWE-78, CWE-94, CWE-506, CWE-434...)
 - Phát hiện dữ liệu cá nhân theo Nghị định 13 (CCCD, thẻ tín dụng, tài khoản ngân hàng, email, sức khỏe, sinh trắc...)
 - Đánh giá tuân thủ + đề xuất khắc phục tự động (CHMOD 600, mã hóa AES-256, cách ly mã độc)
-- Báo cáo HTML/CSV trực quan
+- Báo cáo HTML/CSV trực quan (kèm cột CVSS, CWE)
 
 ## Chạy nhanh
 

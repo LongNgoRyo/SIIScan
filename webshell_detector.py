@@ -267,3 +267,83 @@ def detect_malware(line_text):
             deduped.append((value, reason))
 
     return deduped
+
+
+# ==========================================================
+# DATA-FLOW ANALYSIS (theo dõi biến từ input -> hàm nguy hiểm)
+# ==========================================================
+# Phân tích trên TOÀN BỘ nội dung file (nhiều dòng), bắt được webshell
+# tách biến qua nhiều dòng mà regex theo từng dòng không thấy.
+
+_DANGEROUS_FUNC_LIST = [
+    "system", "shell_exec", "passthru", "exec", "proc_open", "popen",
+    "eval", "assert", "include", "require", "include_once", "require_once",
+]
+
+_ASSIGN_RE = re.compile(
+    r"\$([a-zA-Z_][\w]*)\s*=\s*([^;]+);", re.IGNORECASE
+)
+
+_INPUT_VAR_RE = re.compile(r"\$(?:_GET|_POST|_REQUEST|_COOKIE|_FILES|_SERVER)", re.IGNORECASE)
+
+_DECODE_FUNC_RE = re.compile(r"(?:base64_decode|str_rot13|gzinflate|gzuncompress|gzdecode|hex2bin|strrev|urldecode)\s*\(")
+
+
+def detect_data_flow(file_text):
+    """
+    Theo dõi luồng dữ liệu: biến xuất phát từ input người dùng
+    ($_GET/$_POST...) rồi (qua giải mã) đến hàm nguy hiểm.
+
+    Trả về list các chuỗi mô tả luồng dữ liệu nguy hiểm phát hiện được.
+    """
+    flows = []
+
+    # 1. Gán biến: bao nhiêu biến "bẩn" (bắt nguồn từ input) và biến nào gọi hàm nguy hiểm
+    tainted = set()   # biến bắt nguồn từ input người dùng
+    encoded_to = {}   # var -> hàm giải mã đã áp (dấu vết qua decode)
+
+    for m in _ASSIGN_RE.finditer(file_text):
+        var = m.group(1).lower()
+        expr = m.group(2)
+
+        # Biến nhận trực tiếp từ input người dùng => tainted
+        if _INPUT_VAR_RE.search(expr) and _DECODE_FUNC_RE.search(expr) is None:
+            # không qua decode trực tiếp nhưng có thể là input thô
+            tainted.add(var)
+        # Biến = decode(input) => vừa tainted vừa encoded
+        if _INPUT_VAR_RE.search(expr) and _DECODE_FUNC_RE.search(expr):
+            tainted.add(var)
+            mdec = _DECODE_FUNC_RE.search(expr)
+            encoded_to[var] = mdec.group(1)
+        # Biến = decode(biến khác đã tainted) => lan taint
+        if _DECODE_FUNC_RE.search(expr):
+            ref_vars = re.findall(r"\$([a-zA-Z_][\w]*)", expr)
+            for rv in ref_vars:
+                if rv.lower() in tainted:
+                    tainted.add(var)
+                    encoded_to[var] = encoded_to.get(rv.lower(), "decode-chain")
+
+    # 2. Biến tainted được truyền vào hàm nguy hiểm => cảnh báo
+    for func in _DANGEROUS_FUNC_LIST:
+        # tìm lời gọi func($var) hoặc func(..., $var, ...)
+        for m in re.finditer(r"\b" + re.escape(func) + r"\s*\(\s*\$([a-zA-Z_][\w]*)", file_text, re.IGNORECASE):
+            var = m.group(1).lower()
+            if var in tainted:
+                trace = encoded_to.get(var, "trực tiếp từ input")
+                flows.append(f"luồng dữ liệu: $_{var.upper()} (nguồn người dùng) → {func}()")
+
+    # Bắt $var() — gọi hàm động với biến tainted
+    for m in _VAR_CALL_RE.finditer(file_text):
+        vcall = m.group(0)
+        vname = re.search(r"\$([a-zA-Z_][\w]*)", vcall)
+        if vname and vname.group(1).lower() in tainted:
+            flows.append(f"gọi hàm động từ biến người dùng: {vcall.strip()}")
+
+    # loại bỏ trùng
+    seen = set()
+    deduped = []
+    for f in flows:
+        if f not in seen:
+            seen.add(f)
+            deduped.append(f)
+    return deduped

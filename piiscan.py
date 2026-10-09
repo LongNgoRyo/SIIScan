@@ -12,9 +12,9 @@ from pathlib import Path
 
 # Webshell/backdoor detector nâng cao (dựa trên pattern GitHub: php-malware-finder, Panelica, webshell-analyzer)
 try:
-    from webshell_detector import detect_malware
+    from webshell_detector import detect_malware, detect_data_flow
 except ImportError:
-    detect_malware = None
+    detect_malware = detect_data_flow = None
 
 # Chấm điểm CVSS 3.1 + phân loại + CWE + MITRE + entropy + risk rating cho mã độc
 try:
@@ -239,6 +239,45 @@ def mask_pii_value_python(pii_type, value):
 # ==========================================
 # MODULES: SCANNER, PARSER, ANALYZER
 # ==========================================
+# Magic bytes của các định dạng ảnh phổ biến (để phát hiện file "giả ảnh" chứa mã nhúng)
+_MAGIC_SIGNATURES = {
+    ".jpg": [b"\xff\xd8\xff"], ".jpeg": [b"\xff\xd8\xff"], ".png": [b"\x89PNG\r\n\x1a\n"],
+    ".gif": [b"GIF87a", b"GIF89a"], ".bmp": [b"BM"],
+    ".pdf": [b"%PDF-"], ".zip": [b"PK\x03\x04"],
+}
+
+def detect_polyglot_file(file_path):
+    """
+    Phát hiện file polyglot: đuôi file là ảnh/pdf nhưng nội dung chứa mã PHP/lệnh nhúng.
+    Trả về (bool, str) — (có nghi ngờ, mô tả).
+    """
+    if not isinstance(file_path, Path):
+        file_path = Path(file_path)
+    suffix = file_path.suffix.lower()
+    sigs = _MAGIC_SIGNATURES.get(suffix)
+    if not sigs:
+        return (False, "")
+    try:
+        with open(file_path, "rb") as f:
+            head = f.read(2048)
+        has_valid_magic = any(head.startswith(s) for s in sigs)
+        # Tìm mã độc nhúng phía sau header ảnh hợp lệ
+        tail = head
+        # bỏ magic bytes rồi quét phần còn lại
+        for s in sigs:
+            if tail.startswith(s):
+                tail = tail[len(s):]
+                break
+        # dấu hiệu mã PHP/lệnh nhúng trong phần sau magic
+        payload_flags = [b"<?php", b"<?=", b"eval", b"base64_decode", b"system", b"shell_exec", b"<?", b"GIF89a<?php"]
+        found = [pf.decode('latin1') for pf in payload_flags if pf in tail]
+        if found:
+            return (True, f"nghi ngờ polyglot: file {suffix} chứa mã nhúng {', '.join(found)} sau magic bytes")
+        return (False, "")
+    except Exception:
+        return (False, "")
+
+
 class PIIScanner:
     """Core PII Scanner Engine."""
     
@@ -472,6 +511,23 @@ class PIIAnalyzer:
                             "context": cleaned_line[:100] + ("..." if len(cleaned_line) > 100 else "")
                         })
                         
+        # === Data-flow analysis: theo dõi biến từ input -> hàm nguy hiểm (toàn file) ===
+        if detect_data_flow is not None:
+            try:
+                with open(file_path, "r", encoding="utf-8", errors="ignore") as _f:
+                    full_text = _f.read(200000)  # tối đa 200KB
+                for flow_desc in detect_data_flow(full_text):
+                    findings.append({
+                        "type": "Mã độc & Lệnh nguy hiểm (Webshell/Backdoor)",
+                        "value": flow_desc,
+                        "line": 0,
+                        "context": flow_desc[:100],
+                        "reason": "data-flow (biến người dùng → hàm nguy hiểm)",
+                        "data_flow": True,
+                    })
+            except Exception:
+                pass
+
         return findings
 
 
@@ -1278,6 +1334,25 @@ class PIIScanAPIHandler(BaseHTTPRequestHandler):
             for file_path in scanner.scan_directories():
                 findings = analyzer.analyze_file(file_path)
                 eval_result = compliance.evaluate(file_path, findings)
+                
+                # Phát hiện polyglot (file ảnh/pdf chứa mã nhúng)
+                is_poly, poly_desc = detect_polyglot_file(file_path)
+                if is_poly:
+                    findings.append({
+                        "type": "Mã độc & Lệnh nguy hiểm (Webshell/Backdoor)",
+                        "value": poly_desc,
+                        "line": 0,
+                        "context": poly_desc[:100],
+                        "reason": "polyglot (mã nhúng trong file đa định dạng)",
+                        "cwe_id": "CWE-506",
+                        "cvss_score": 9.8,
+                        "cvss_severity": "Critical",
+                        "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+                        "mitre_id": "T1027",
+                        "mitre_name": "Obfuscated Files or Information",
+                        "mitre_tactic": "Defense Evasion",
+                    })
+                    eval_result = compliance.evaluate(file_path, findings)
                 
                 # Đường dẫn tương đối so với thư mục gốc đã quét (hiển thị folder/subfolder)
                 try:

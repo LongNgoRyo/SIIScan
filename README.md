@@ -16,6 +16,8 @@ https://longngoryo.github.io/SIIScan/
 - **Phân tích entropy Shannon** phát hiện payload mã hóa/nén bị che giấu
 - **Signature detection (YARA-style)** — nhận diện các họ webshell nổi tiếng (c99, r57, WSO, b374k, Weevely, China Chopper) và kỹ thuật obfuscation bằng rule engine thuần Python (`yara_style_rules.py`, thay thế yara-python vốn cần biên dịch C)
 - **Đánh giá rủi ro OWASP Risk Rating** (Likelihood × Impact) kết hợp CVSS + quyền truy cập + vị trí thư mục
+- **Data-flow analysis** — theo dõi luồng dữ liệu từ input người dùng ($_GET/$_POST) → qua giải mã → đến hàm nguy hiểm, bắt webshell tách biến nhiều dòng
+- **Phát hiện polyglot** — nhận diện file "giả ảnh" (GIF/PNG/JPG) chứa mã PHP/lệnh nhúng sau magic bytes
 - Phát hiện dữ liệu cá nhân theo Nghị định 13 (CCCD, thẻ tín dụng, tài khoản ngân hàng, email, sức khỏe, sinh trắc...)
 - Đánh giá tuân thủ + đề xuất khắc phục tự động (CHMOD 600, mã hóa AES-256, cách ly mã độc)
 - Dashboard phân bố CVSS + báo cáo HTML/CSV/PDF (kèm cột CVSS, CWE, MITRE)

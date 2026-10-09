@@ -2217,6 +2217,30 @@ function exportReport() {
         });
     });
 
+    // ===== Bảng phân tích mã độc tĩnh (hash/entropy/family/IoC) cho PDF =====
+    let malwareAnalysisHtml = '';
+    scanResults.filter(r => r.malwareAnalysis).forEach(res => {
+        const ma = res.malwareAnalysis;
+        const h = ma.hashes || {};
+        const ioc = ma.iocs || { ips: [], urls: [], domains: [] };
+        const iocList = [...ioc.ips, ...ioc.urls, ...ioc.domains].join(', ') || 'Không phát hiện';
+        malwareAnalysisHtml += `
+            <div style="margin-bottom: 12px; padding: 12px; border: 1px solid #E5E7EB; border-left: 4px solid #F59E0B; border-radius: 6px; break-inside: avoid;">
+                <div style="font-weight: 700; font-size: 0.85rem; color: #111827;">📄 ${res.relativePath || res.fileName}</div>
+                <div style="margin-top: 4px; display:flex; flex-wrap:wrap; gap:8px; font-size: 0.72rem;">
+                    <span style="background:#FEE2E2; color:#991B1B; padding:2px 8px; border-radius:4px; font-weight:700;">${ma.family}</span>
+                    <span style="color:#6B7280; font-family:monospace;">${ma.type}</span>
+                    <span style="color:#6B7280; font-family:monospace;">Entropy: ${ma.entropy}</span>
+                </div>
+                <div style="margin-top:6px; font-size:0.68rem; font-family:monospace; color:#4B5563; word-break:break-all;">
+                    MD5: ${h.md5 || '—'}<br>
+                    SHA256: ${h.sha256 || '—'}
+                </div>
+                ${ma.pe_info && Object.keys(ma.pe_info).length ? `<div style="margin-top:4px; font-size:0.68rem; color:#1E40AF;">PE: ${ma.pe_info.machine || ''}${ma.pe_info.packer_signs && ma.pe_info.packer_signs.length ? ' ⚠ ' + ma.pe_info.packer_signs[0] : ''}</div>` : ''}
+                <div style="margin-top:4px; font-size:0.68rem; color:#92400E;">IoC: ${iocList}</div>
+            </div>`;
+    });
+
     // ===== Phân loại mã độc / DLCN (dùng cho bảng tuân thủ pháp lý trong PDF) =====
     const CLS_MAL = "Mã độc & Lệnh nguy hiểm (Webshell/Backdoor)";
     const pdfMalwareFiles = scanResults.filter(r => r.piiFound.some(p => p.name === CLS_MAL));
@@ -2340,8 +2364,8 @@ function exportReport() {
         <!-- TRANG 2: TỔNG QUAN KẾT QUẢ VÀ HÀNH CHÍNH -->
         <div class="pdf-page" style="height: 1120px;">
             <div class="pdf-header">
-                <h2>PIIScan Server Pro</h2>
-                <span style="font-size: 0.8rem; color: #6B7280;">Báo cáo kiểm toán tuân thủ bảo vệ dữ liệu cá nhân</span>
+                <h2>Malware Analysis</h2>
+                <span style="font-size: 0.8rem; color: #6B7280;">Báo cáo phân tích mã độc tự động</span>
             </div>
 
             <h3 style="color: #1E3A8A; font-size: 1.25rem; margin-top: 0; margin-bottom: 12px; border-left: 4px solid #3B82F6; padding-left: 10px;">I. Tóm tắt Số liệu Kiểm toán</h3>
@@ -2421,18 +2445,43 @@ function exportReport() {
             </div>
 
             <div class="pdf-footer">
-                <span>PIIScan Server Pro v2.5</span>
+                <span>Malware Analysis Platform</span>
                 <span>Trang 2</span>
             </div>
         </div>
 
         <div class="html2pdf__page-break"></div>
 
-        <!-- TRANG 3: MÔ TẢ CHI TIẾT 14 LOẠI LỖ HỔNG / RỦI RO PHÁT HIỆN -->
+        <!-- TRANG 3: PHÂN TÍCH MÃ ĐỘC TĨNH -->
+        ${malwareAnalysisHtml ? `
         <div class="pdf-page" style="height: 1120px;">
             <div class="pdf-header">
-                <h2>PIIScan Server Pro</h2>
-                <span style="font-size: 0.8rem; color: #6B7280;">Báo cáo kiểm toán tuân thủ bảo vệ dữ liệu cá nhân</span>
+                <h2>Malware Analysis</h2>
+                <span style="font-size: 0.8rem; color: #6B7280;">Phân tích mã độc tĩnh — hash, entropy, PE, IoC</span>
+            </div>
+
+            <h3 style="color: #1E3A8A; font-size: 1.25rem; margin-top: 0; margin-bottom: 12px; border-left: 4px solid #F59E0B; padding-left: 10px;">III. Phân tích Mã độc Tĩnh</h3>
+            <p style="font-size: 0.9rem; color: #4B5563; line-height: 1.55; margin-bottom: 15px;">
+                Kết quả mổ xẻ tĩnh từng mẫu mã độc: phân loại họ (family), loại file, băm mật mã (MD5/SHA256), entropy (phát hiện packed/encrypted), PE header và IoC (IP/URL/domain):
+            </p>
+
+            <div style="height: 880px; overflow-y: auto; padding-right: 5px;">
+                ${malwareAnalysisHtml}
+            </div>
+
+            <div class="pdf-footer">
+                <span>Malware Analysis Platform</span>
+                <span>Trang 3</span>
+            </div>
+        </div>
+        <div class="html2pdf__page-break"></div>
+        ` : ''}
+
+        <!-- TRANG 4: MÔ TẢ CHI TIẾT 14 LOẠI LỖ HỔNG / RỦI RO PHÁT HIỆN -->
+        <div class="pdf-page" style="height: 1120px;">
+            <div class="pdf-header">
+                <h2>Malware Analysis</h2>
+                <span style="font-size: 0.8rem; color: #6B7280;">Báo cáo phân tích mã độc tự động</span>
             </div>
 
             <h3 style="color: #1E3A8A; font-size: 1.25rem; margin-top: 0; margin-bottom: 12px; border-left: 4px solid #3B82F6; padding-left: 10px;">III. Phân tích Chi tiết Lỗ hổng & Rủi ro bảo mật phát hiện</h3>
@@ -2445,7 +2494,7 @@ function exportReport() {
             </div>
 
             <div class="pdf-footer">
-                <span>PIIScan Server Pro v2.5</span>
+                <span>Malware Analysis Platform</span>
                 <span>Trang 3</span>
             </div>
         </div>
@@ -2455,8 +2504,8 @@ function exportReport() {
         <!-- TRANG 4: DANH SÁCH FILE VÀ ĐỀ XUẤT HÀNH ĐỘNG -->
         <div class="pdf-page" style="height: 1120px;">
             <div class="pdf-header">
-                <h2>PIIScan Server Pro</h2>
-                <span style="font-size: 0.8rem; color: #6B7280;">Báo cáo kiểm toán tuân thủ bảo vệ dữ liệu cá nhân</span>
+                <h2>Malware Analysis</h2>
+                <span style="font-size: 0.8rem; color: #6B7280;">Báo cáo phân tích mã độc tự động</span>
             </div>
 
             <h3 style="color: #1E3A8A; font-size: 1.25rem; margin-top: 0; margin-bottom: 12px; border-left: 4px solid #3B82F6; padding-left: 10px;">IV. Danh sách Chi tiết các Tệp tin chứa rủi ro</h3>
@@ -2502,7 +2551,7 @@ function exportReport() {
             </div>
 
             <div class="pdf-footer">
-                <span>PIIScan Server Pro v2.5</span>
+                <span>Malware Analysis Platform</span>
                 <span>Trang 4</span>
             </div>
         </div>
@@ -2512,8 +2561,8 @@ function exportReport() {
         <div class="html2pdf__page-break"></div>
         <div class="pdf-page" style="height: 1120px;">
             <div class="pdf-header">
-                <h2>PIIScan Server Pro</h2>
-                <span style="font-size: 0.8rem; color: #6B7280;">Báo cáo kiểm toán tuân thủ bảo vệ dữ liệu cá nhân</span>
+                <h2>Malware Analysis</h2>
+                <span style="font-size: 0.8rem; color: #6B7280;">Báo cáo phân tích mã độc tự động</span>
             </div>
 
             <h3 style="color: #1E3A8A; font-size: 1.25rem; margin-top: 0; margin-bottom: 12px; border-left: 4px solid #EF4444; padding-left: 10px;">VI. Trích đoạn Mã nguồn chứa Lệnh Nguy hiểm</h3>
@@ -2526,7 +2575,7 @@ function exportReport() {
             </div>
 
             <div class="pdf-footer">
-                <span>PIIScan Server Pro v2.5</span>
+                <span>Malware Analysis Platform</span>
                 <span>Trang 5</span>
             </div>
         </div>

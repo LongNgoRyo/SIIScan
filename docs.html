@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tài liệu Hướng dẫn - PIIScan Server Pro</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script>
+    if (localStorage.getItem('theme') === 'light') {
+      document.documentElement.classList.add('light-theme');
+    }
+  </script>
+</head>
+<body>
+
+<!-- ===== THANH ĐIỀU HƯỚNG (NAVBAR) ===== -->
+<nav class="navbar" id="navbar">
+  <div class="nav-container">
+    <a href="index.html" class="nav-logo">
+      <span class="logo-icon">🔍</span>
+      <span class="logo-text">PII<span class="logo-accent">Scan</span> Server</span>
+    </a>
+    <div class="nav-links">
+      <a href="index.html" class="nav-link">Trang chủ</a>
+      <a href="api.html" class="nav-link">API Tích hợp</a>
+      <a href="docs.html" class="nav-link active">Tài liệu hướng dẫn</a>
+    </div>
+    <div class="nav-actions">
+      <button class="btn-ghost" id="themeToggle">🌙</button>
+      <button class="btn-outline">Đăng nhập</button>
+      <button class="btn-primary">Bắt đầu ngay</button>
+    </div>
+  </div>
+</nav>
+
+<!-- ===== PAGE HEADER ===== -->
+<header class="page-header">
+  <h1 class="page-title">Tài liệu <span class="gradient-text">Hướng dẫn Sử dụng</span></h1>
+  <p class="page-subtitle">Tìm hiểu cách PIIScan Server Pro kiểm tra, phân loại dữ liệu cá nhân (DLCN) theo Nghị định 13/2023/NĐ-CP và phát hiện các rủi ro bảo mật (mã độc, backdoor, lệnh nguy hiểm) trên máy chủ.</p>
+</header>
+
+<!-- ===== DOCS LAYOUT ===== -->
+<div class="docs-container">
+  
+  <!-- Sidebar -->
+  <aside class="docs-sidebar">
+    <div class="sidebar-group">
+      <h4 class="sidebar-title">Tổng quan</h4>
+      <a href="#how-it-works" class="sidebar-link active">Nguyên lý hoạt động</a>
+      <a href="#pii-classification" class="sidebar-link">Phân loại Dữ liệu & Rủi ro</a>
+      <a href="#compliance" class="sidebar-link">Quy định Pháp lý & Tuân thủ</a>
+    </div>
+    
+    <div class="sidebar-group">
+      <h4 class="sidebar-title">Chi tiết Kỹ thuật</h4>
+      <a href="#regex-matching" class="sidebar-link">Trích xuất Biểu thức (Regex)</a>
+      <a href="#chmod-analysis" class="sidebar-link">Phân tích Quyền hạn (CHMOD)</a>
+      <a href="#remediation" class="sidebar-link">Giải pháp Khắc phục</a>
+    </div>
+    
+    <div class="sidebar-group">
+      <h4 class="sidebar-title">Tài nguyên</h4>
+      <a href="#faq" class="sidebar-link">Câu hỏi thường gặp</a>
+    </div>
+  </aside>
+
+  <!-- Content -->
+  <main class="docs-content">
+    
+    <section id="how-it-works">
+      <h2>Nguyên lý Hoạt động</h2>
+      <p>PIIScan Server Pro hoạt động như một công cụ tự động kiểm tra bảo mật dữ liệu trên máy chủ web. Hệ thống sẽ quét sâu mã nguồn, nhật ký hệ thống, các bản sao lưu database và thư mục tải lên để phát hiện mã độc độc hại và dữ liệu cá nhân thô chưa được bảo vệ.</p>
+      
+      <p>Quy trình kiểm tra bảo mật gồm 4 giai đoạn chính:</p>
+      <ul>
+        <li style="color: var(--text-secondary); margin-bottom: 8px;"><strong>1. Quét thư mục đệ quy:</strong> Tìm kiếm toàn bộ các tệp tin trong thư mục được chỉ định (ví dụ: thư mục upload mã nguồn, cấu hình).</li>
+        <li style="color: var(--text-secondary); margin-bottom: 8px;"><strong>2. Trích xuất mẫu dữ liệu:</strong> Sử dụng các biểu thức chính quy (Regex) kết hợp logic heuristics để phát hiện mã độc, các câu lệnh nguy hiểm (eval, exec, backdoor), CCCD, thẻ tín dụng, tài khoản ngân hàng, email, điện thoại.</li>
+        <li style="color: var(--text-secondary); margin-bottom: 8px;"><strong>3. Phân tích phân quyền (CHMOD):</strong> Kiểm tra cấu hình phân quyền truy cập của tệp tin trên máy chủ để phát hiện các tệp tin có quyền truy cập lỏng lẻo (như CHMOD 777 hoặc 755).</li>
+        <li style="color: var(--text-secondary); margin-bottom: 8px;"><strong>4. Kết xuất báo cáo tuân thủ:</strong> Đánh giá mức độ an toàn và tự động kết xuất báo cáo tuân thủ Nghị định 13/2023/NĐ-CP (Việt Nam) và các tiêu chuẩn bảo mật quốc tế.</li>
+      </ul>
+    </section>
+
+    <section id="pii-classification">
+      <h2>Phân loại Dữ liệu & Mức độ Rủi ro</h2>
+      <p>Dữ liệu và mã độc phát hiện được tự động chia thành các nhóm tương ứng để quản trị viên dễ dàng lập kế hoạch xử lý:</p>
+      
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 24px 0;">
+        <div style="background: var(--bg-card); padding: 16px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+          <h4 style="color: #EF4444; margin-bottom: 8px;">Nguy cơ Rất cao (Mã độc & Lệnh nguy hiểm)</h4>
+          <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5;">Các tệp tin chứa Webshell, Backdoor, hoặc mã độc thực thi lệnh hệ thống tùy ý (eval, system, exec...). <strong>Yêu cầu lập tức cách ly hoặc xóa bỏ tệp tin độc hại.</strong></p>
+        </div>
+        <div style="background: var(--bg-card); padding: 16px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+          <h4 style="color: #F87171; margin-bottom: 8px;">Dữ liệu Nhạy cảm (Nghị định 13)</h4>
+          <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5;">Số định danh CCCD/CMND, số tài khoản ngân hàng, thông tin thẻ tín dụng, mật khẩu/API Key, dữ liệu sinh trắc học và hồ sơ y tế. <strong>Bắt buộc mã hóa lưu trữ.</strong></p>
+        </div>
+        <div style="background: var(--bg-card); padding: 16px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); grid-column: 1 / -1;">
+          <h4 style="color: #F59E0B; margin-bottom: 8px;">Dữ liệu Cơ bản & Phân quyền yếu</h4>
+          <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5;">Họ tên, số điện thoại, ngày sinh, địa chỉ vật lý, email, IP. <strong>Khuyến nghị thiết lập hạn chế quyền đọc/ghi công khai (CHMOD 600) trên máy chủ.</strong></p>
+        </div>
+      </div>
+    </section>
+
+    <section id="compliance">
+      <h2>Quy định Pháp lý & Khung Tuân thủ</h2>
+      <p>Việc bảo vệ dữ liệu cá nhân là bắt buộc về mặt pháp lý đối với mọi tổ chức xử lý dữ liệu tại Việt Nam và quốc tế:</p>
+      <ul>
+        <li style="color: var(--text-secondary); margin-bottom: 12px; line-height: 1.6;">
+          <strong>Nghị định 13/2023/NĐ-CP (Việt Nam):</strong> Điều 36 và 37 quy định các tổ chức kiểm soát và xử lý dữ liệu phải áp dụng các biện pháp kỹ thuật cần thiết để bảo vệ dữ liệu cá nhân, chống lộ lọt thông tin nhạy cảm.
+        </li>
+        <li style="color: var(--text-secondary); margin-bottom: 12px; line-height: 1.6;">
+          <strong>Tiêu chuẩn PCI-DSS & ISO 27001:</strong> Yêu cầu mã hóa thông tin tài chính/chủ thẻ khi lưu trữ và áp dụng nguyên tắc đặc quyền tối thiểu đối với quyền truy cập tệp tin cấu hình nhạy cảm.
+        </li>
+      </ul>
+    </section>
+
+    <section id="remediation">
+      <h2>Giải pháp Khắc phục Tự động</h2>
+      <p>Sau khi phát hiện các tệp tin chứa rủi ro an ninh mạng hoặc rò rỉ dữ liệu, quản trị viên có thể sử dụng tính năng khắc phục tự động:</p>
+      <ol style="padding-left: 20px; color: var(--text-secondary); line-height: 1.8;">
+        <li><strong>Mã hóa AES-256:</strong> Mã hóa nội dung dữ liệu nhạy cảm thô sang dạng mã hóa mạnh để tránh rò rỉ dữ liệu.</li>
+        <li><strong>Cách ly / Xóa bỏ:</strong> Vô hiệu hóa hoạt động của mã độc hoặc các tệp tin shell độc hại nhằm bảo vệ máy chủ khỏi bị chiếm quyền điều khiển.</li>
+        <li><strong>Thu hồi quyền truy cập (CHMOD 600):</strong> Giới hạn quyền truy cập các tệp tin cấu hình và dữ liệu chỉ cho người sở hữu tệp, ngăn ngừa quyền đọc/ghi tự do từ bên ngoài.</li>
+      </ol>
+    </section>
+
+    <section id="faq">
+      <h2>Câu hỏi Thường gặp (FAQ)</h2>
+      
+      <h3>Dữ liệu quét của tôi có bị gửi ra ngoài không?</h3>
+      <p>Không. PIIScan Server Pro thực hiện toàn bộ việc quét và phân tích dữ liệu trực tiếp tại local (trên máy chủ của bạn hoặc trong sandbox của trình duyệt). Dữ liệu nhạy cảm của bạn tuyệt đối không được truyền qua Internet.</p>
+
+      <h3>Công cụ hỗ trợ các định dạng tệp tin nào?</h3>
+      <p>Hệ thống hỗ trợ quét hầu hết các tệp văn bản và mã nguồn như: <code>.txt, .csv, .json, .log, .sql, .env, .config, .php, .py, .js</code> và các tài liệu văn phòng thông thường.</p>
+
+      <h3>Làm thế nào để tránh nhận diện sai (False Positive) địa danh?</h3>
+      <p>Hệ thống đã được tích hợp bộ lọc danh sách loại trừ (blacklist) nâng cao, giúp loại bỏ các địa danh phổ biến như "Thành phố Hồ Chí Minh", "Hà Nội" khỏi kết quả nhận dạng Họ và tên một cách thông minh.</p>
+    </section>
+
+  </main>
+</div>
+
+<!-- ===== PHẦN FOOTER ===== -->
+<footer class="footer">
+  <div class="footer-container">
+    <div class="footer-brand">
+      <span class="logo-icon">🔍</span>
+      <span class="logo-text">PII<span class="logo-accent">Scan</span> Server</span>
+      <p>Giải pháp quét mã độc tự động và đánh giá tuân thủ bảo mật dữ liệu cá nhân toàn diện cho các máy chủ web hiện đại.</p>
+    </div>
+    <div class="footer-links">
+      <div class="footer-col">
+        <h4>Tính năng</h4>
+        <a href="#">Quét Máy chủ</a>
+        <a href="#">Kiểm toán Tuân thủ</a>
+      </div>
+      <div class="footer-col">
+        <h4>Tài nguyên</h4>
+        <a href="api.html">Tài liệu API</a>
+        <a href="docs.html">Hướng dẫn sử dụng</a>
+      </div>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <p>© 2026 PIIScan Server Pro. Hệ thống kiểm toán máy chủ tự động tuân thủ Nghị định 13/2023/NĐ-CP và tiêu chuẩn quốc tế.</p>
+  </div>
+</footer>
+
+<script>
+  const links = document.querySelectorAll('.sidebar-link');
+  links.forEach(link => {
+    link.addEventListener('click', function() {
+      links.forEach(l => l.classList.remove('active'));
+      this.classList.add('active');
+    });
+  });
+
+  // Theme Toggle
+  const themeToggleBtn = document.getElementById('themeToggle');
+  const savedTheme = localStorage.getItem('theme');
+  if (savedTheme === 'light') {
+    document.documentElement.classList.add('light-theme');
+    if (themeToggleBtn) themeToggleBtn.textContent = '☀️';
+  } else {
+    document.documentElement.classList.remove('light-theme');
+    if (themeToggleBtn) themeToggleBtn.textContent = '🌙';
+  }
+  if (themeToggleBtn) {
+    themeToggleBtn.addEventListener('click', () => {
+      document.documentElement.classList.toggle('light-theme');
+      const isLight = document.documentElement.classList.contains('light-theme');
+      localStorage.setItem('theme', isLight ? 'light' : 'dark');
+      themeToggleBtn.textContent = isLight ? '☀️' : '🌙';
+    });
+  }
+</script>
+</body>
+</html>

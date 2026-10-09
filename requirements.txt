@@ -1,0 +1,5 @@
+pandas
+jinja2
+PyPDF2
+python-docx
+openpyxl

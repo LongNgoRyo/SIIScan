@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Reports (tái tạo được bằng cách chạy lại piiscan.py)
+report_malicious.html
+report_malicious.csv
+report_benign.html
+report_benign.csv
+report.html
+report.csv
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test dataset có chứa mã độc thật — quyết định gửi hay không:
+# Mặc định GIỮ file mẫu để người khác tái hiện bài đồ án. Bỏ comment dòng
+# dưới nếu không muốn đưa mã độc mẫu lên repo công khai.
+# test_dataset/malicious/

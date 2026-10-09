@@ -873,6 +873,33 @@ function formatBytes(bytes, decimals = 2) {
 // ===== UI POPULATORS =====
 
 // Cập nhật Vòng điểm Bảo mật Dữ liệu
+// Hàm tính điểm an toàn DUY NHẤT — dùng chung cho vòng tròn và xuất PDF
+function computeSecurityScore() {
+    let securityScore = 100;
+    if (scanStats.totalFiles > 0) {
+        if (isRemediated) {
+            return 100;
+        }
+        const highCount = scanStats.high || 0;
+        const mediumCount = scanStats.medium || 0;
+        const lowCount = scanStats.low || 0;
+
+        securityScore -= (highCount * 20);
+        securityScore -= (mediumCount * 10);
+        securityScore -= (lowCount * 3);
+
+        if (highCount > 0) {
+            securityScore = Math.max(10, Math.min(40, 60 - highCount * 10));
+        } else if (mediumCount > 0) {
+            securityScore = Math.max(50, Math.min(79, 85 - mediumCount * 5));
+        }
+        if (securityScore < 10 && (highCount > 0 || mediumCount > 0 || lowCount > 0)) {
+            securityScore = 10;
+        }
+    }
+    return securityScore;
+}
+
 function updateScoreRing() {
     const ringFill = document.getElementById('ringFill');
     const scoreNum = document.getElementById('scoreNum');
@@ -881,34 +908,8 @@ function updateScoreRing() {
 
     if (!scoreNum || !ringFill) return;
 
-    // Tính toán điểm số: bắt đầu từ 100, trừ điểm cho mỗi tệp tin chưa bảo mật chứa DLCN có nguy cơ
-    let securityScore = 100;
-    
-    if (scanStats.totalFiles > 0) {
-        if (isRemediated) {
-            securityScore = 100;
-        } else {
-            const unsecuredHigh = scanResults.filter(r => r.securityStatus === 'unsecured' && r.level === 'high').length;
-            const unsecuredMed = scanResults.filter(r => r.securityStatus === 'unsecured' && r.level === 'medium').length;
-            const warningFiles = scanResults.filter(r => r.securityStatus === 'warning').length;
-            
-            // Trừ điểm
-            securityScore -= (unsecuredHigh * 15);
-            securityScore -= (unsecuredMed * 8);
-            securityScore -= (warningFiles * 3);
-            
-            // Quy tắc giới hạn điểm tương ứng với mức độ tuân thủ
-            if (unsecuredHigh > 0) {
-                // Nếu có rò rỉ dữ liệu nguy cơ cao, điểm tối đa chỉ ở mức Nguy cơ cao (< 50)
-                securityScore = Math.max(15, Math.min(30, 45 - unsecuredHigh * 5));
-            } else if (unsecuredMed > 0) {
-                // Nếu có rò rỉ trung bình, điểm tối đa ở mức Cảnh báo (50 <= điểm < 80)
-                securityScore = Math.max(50, Math.min(65, 75 - unsecuredMed * 3));
-            } else if (securityScore < 15 && scanStats.filesWithPii > 0) {
-                securityScore = 15; // Điểm tối thiểu là 15 nếu có vi phạm
-            }
-        }
-    }
+    // Điểm an toàn được tính tập trung trong computeSecurityScore()
+    const securityScore = computeSecurityScore();
 
     scoreNum.textContent = securityScore;
     scoreDenom.textContent = "/100 điểm";
@@ -1649,41 +1650,20 @@ function exportReport() {
         return;
     }
 
-    // Lấy điểm số an toàn hiện tại
-    let securityScore = 100;
-    if (scanStats.totalFiles > 0) {
-        if (isRemediated) {
-            securityScore = 100;
-        } else {
-            const unsecuredHigh = scanResults.filter(r => r.securityStatus === 'unsecured' && r.level === 'high').length;
-            const unsecuredMed = scanResults.filter(r => r.securityStatus === 'unsecured' && r.level === 'medium').length;
-            const warningFiles = scanResults.filter(r => r.securityStatus === 'warning').length;
-            
-            securityScore -= (unsecuredHigh * 15);
-            securityScore -= (unsecuredMed * 8);
-            securityScore -= (warningFiles * 3);
-            
-            if (unsecuredHigh > 0) {
-                securityScore = Math.max(15, Math.min(30, 45 - unsecuredHigh * 5));
-            } else if (unsecuredMed > 0) {
-                securityScore = Math.max(50, Math.min(65, 75 - unsecuredMed * 3));
-            } else if (securityScore < 15 && scanStats.filesWithPii > 0) {
-                securityScore = 15;
-            }
-        }
-    }
+    // Lấy điểm số an toàn hiện tại (tính tập trung)
+    const securityScore = computeSecurityScore();
 
     let overallRating = "AN TOÀN / TUÂN THỦ";
     let ratingColor = "#10B981";
     let ratingClass = "pass";
     if (!isRemediated) {
-        const unsecuredHigh = scanResults.filter(r => r.securityStatus === 'unsecured' && r.level === 'high').length;
-        const unsecuredMed = scanResults.filter(r => r.securityStatus === 'unsecured' && r.level === 'medium').length;
-        if (unsecuredHigh > 0) {
+        const highCount = scanStats.high || 0;
+        const mediumCount = scanStats.medium || 0;
+        if (highCount > 0) {
             overallRating = "KHÔNG TUÂN THỦ (NGUY CƠ CAO)";
             ratingColor = "#EF4444";
             ratingClass = "fail";
-        } else if (unsecuredMed > 0) {
+        } else if (mediumCount > 0) {
             overallRating = "TUÂN THỦ MỘT PHẦN (CẢNH BÁO)";
             ratingColor = "#F59E0B";
             ratingClass = "warn";

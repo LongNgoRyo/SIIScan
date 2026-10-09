@@ -1265,13 +1265,24 @@ class PIIScanAPIHandler(BaseHTTPRequestHandler):
                         "details": details
                     })
                 
+                # Chuẩn hóa level về high/medium/low/safe (thống nhất với frontend & scanStats)
+                raw_level = eval_result["level"]
+                if raw_level == "Critical":
+                    level_field = "high"
+                elif raw_level == "Warning":
+                    level_field = "medium"
+                elif raw_level == "Low":
+                    level_field = "low"
+                else:
+                    level_field = "safe"
+
                 scan_results.append({
                     "fileName": file_path.name,
                     "path": str(file_path),
                     "relativePath": rel_path,
                     "format": file_path.suffix.lower(),
-                    "level": eval_result["level"].lower() if eval_result["level"] != "Critical" else "high",
-                    "securityStatus": "unsecured" if eval_result["is_unsecured"] else ("warning" if eval_result["level"] == "Warning" else "secured"),
+                    "level": level_field,
+                    "securityStatus": "unsecured" if eval_result["is_unsecured"] else ("warning" if raw_level == "Warning" else "secured"),
                     "permissions": eval_result["permissions"],
                     "size": f"{os.path.getsize(file_path)/1024:.1f} KB" if os.path.exists(file_path) else "0 KB",
                     "date": datetime.datetime.fromtimestamp(os.path.getmtime(file_path)).strftime('%Y-%m-%d') if os.path.exists(file_path) else "",

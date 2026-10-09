@@ -14,6 +14,7 @@ https://longngoryo.github.io/SIIScan/
 - **Phân loại mã độc** chi tiết (webshell RCE, command execution, reverse shell, RFI, obfuscation, lỗ hổng upload...) + **ánh xạ mã CWE** (CWE-78, CWE-94, CWE-506, CWE-434...)
 - **Ánh xạ MITRE ATT&CK** (T1059, T1505.003, T1027, T1071, T1190, T1552...) kèm chiến thuật (tactic)
 - **Phân tích entropy Shannon** phát hiện payload mã hóa/nén bị che giấu
+- **Signature detection (YARA-style)** — nhận diện các họ webshell nổi tiếng (c99, r57, WSO, b374k, Weevely, China Chopper) và kỹ thuật obfuscation bằng rule engine thuần Python (`yara_style_rules.py`, thay thế yara-python vốn cần biên dịch C)
 - **Đánh giá rủi ro OWASP Risk Rating** (Likelihood × Impact) kết hợp CVSS + quyền truy cập + vị trí thư mục
 - Phát hiện dữ liệu cá nhân theo Nghị định 13 (CCCD, thẻ tín dụng, tài khoản ngân hàng, email, sức khỏe, sinh trắc...)
 - Đánh giá tuân thủ + đề xuất khắc phục tự động (CHMOD 600, mã hóa AES-256, cách ly mã độc)
@@ -44,6 +45,7 @@ Kết quả: recall 100% (23/23 webshell), 0 false positive mã độc.
 piiscan.py              # Code chính
 webshell_detector.py    # Module phát hiện webshell nâng cao
 cvss_scoring.py         # Chấm CVSS 3.1 + CWE + MITRE + entropy + risk rating
+yara_style_rules.py     # Signature rules (YARA-style) thuần Python
 index.html / app.js / style.css  # Giao diện web
 test_dataset/           # Bộ mẫu kiểm thử
 ```

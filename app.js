@@ -72,6 +72,11 @@ function mitreBadge(mitreId, mitreTactic) {
     return `<span class="mitre-badge" title="${title}" style="display:inline-flex; align-items:center; gap:4px; background:rgba(139,92,246,0.15); color:#A78BFA; border:1px solid rgba(139,92,246,0.4); padding:2px 8px; border-radius:99px; font-size:0.7rem; font-weight:700; font-family:var(--font-mono);">⚔️ ${mitreId}</span>`;
 }
 
+// Render badge signature rule (YARA-style)
+function signatureBadge(ruleId, ruleName) {
+    return `<span class="sig-badge" title="Rule: ${ruleName}" style="display:inline-flex; align-items:center; gap:4px; background:rgba(16,185,129,0.12); color:#34D399; border:1px solid rgba(16,185,129,0.35); padding:2px 8px; border-radius:4px; font-size:0.68rem; font-weight:600; font-family:var(--font-mono);">🔎 ${ruleId}</span>`;
+}
+
 // Hàm ẩn dữ liệu nhạy cảm để hiển thị an toàn
 function maskPIIValue(type, value) {
     if (!value) return "";
@@ -1382,6 +1387,7 @@ function renderDetailedGrid(results) {
                     })()}
                     ${res.entropy !== undefined && res.entropy > 0 ? `<span style="display:inline-flex; align-items:center; gap:4px; font-size:0.7rem; color:var(--text-muted); font-family:var(--font-mono); margin-left:6px;" title="Entropy Shannon">Entropy: ${res.entropy}</span>` : ''}
                     ${res.riskRating ? `<span style="font-size:0.7rem; color:${res.riskRating.level.includes('Cao') ? '#F59E0B' : '#9CA3AF'}; margin-left:6px;" title="OWASP Risk = Likelihood × Impact">Risk: ${res.riskRating.level}</span>` : ''}
+                    ${res.signatures && res.signatures.length > 0 ? `<div style="margin-top:6px; display:flex; flex-wrap:wrap; gap:6px;">${res.signatures.map(s => signatureBadge(s.rule_id, s.rule_name)).join('')}</div>` : ''}
                 </div>
                 <div style="display: flex; align-items: center; gap: 12px;">
                     <div class="pii-file-status">

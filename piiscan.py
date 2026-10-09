@@ -24,6 +24,12 @@ except ImportError:
     classify_finding = get_profile = compute_cvss_from_vector = severity_from_score = None
     shannon_entropy = entropy_flag = owasp_risk_rating = None
 
+# Rule detection theo kiểu YARA (thuần Python, thay thế yara-python)
+try:
+    from yara_style_rules import match_file_rules
+except ImportError:
+    match_file_rules = None
+
 # Try importing parsing and data libraries, with fallback
 try:
     import pandas as pd
@@ -1285,12 +1291,21 @@ class PIIScanAPIHandler(BaseHTTPRequestHandler):
                 # Tính entropy Shannon của file (phát hiện payload mã hóa)
                 file_entropy = 0.0
                 file_entropy_risk = "none"
+                file_signatures = []
                 try:
                     if shannon_entropy is not None:
                         with open(file_path, "rb") as _fb:
-                            file_entropy = shannon_entropy(_fb.read(65536))  # đọc tối đa 64KB đầu
-                        if entropy_flag is not None:
-                            file_entropy_risk = entropy_flag(file_entropy)["risk"]
+                            raw_bytes = _fb.read(65536)  # đọc tối đa 64KB đầu
+                            file_entropy = shannon_entropy(raw_bytes)
+                            if entropy_flag is not None:
+                                file_entropy_risk = entropy_flag(file_entropy)["risk"]
+                            # Quét signature rules (YARA-style) trên nội dung đã đọc
+                            if match_file_rules is not None:
+                                try:
+                                    text_content = raw_bytes.decode("utf-8", errors="ignore")
+                                    file_signatures = match_file_rules(text_content)
+                                except Exception:
+                                    file_signatures = []
                 except Exception:
                     pass
                 
@@ -1376,6 +1391,7 @@ class PIIScanAPIHandler(BaseHTTPRequestHandler):
                     },
                     "entropy": file_entropy,
                     "entropyRisk": file_entropy_risk,
+                    "signatures": file_signatures,
                     "riskRating": file_risk,
                     "piiFound": pii_found_list
                 })

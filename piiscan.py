@@ -592,6 +592,68 @@ class ComplianceEngine:
 # ==========================================
 # REPORTING MODULE
 # ==========================================
+import html as _html
+
+# Mô tả hậu quả + khai thác theo CWE (dùng để "trình bày lỗ hổng gì, làm gì, dẫn đến gì")
+CWE_IMPACT = {
+    "CWE-94": {
+        "what": "Tiêm mã động (Code Injection)",
+        "do": "Kẻ tấn công gửi mã PHP độc qua tham số người dùng; hàm eval/assert thực thi mã này trực tiếp trên máy chủ.",
+        "impact": "Chiếm toàn quyền điều khiển máy chủ web, đọc/sửa/xóa toàn bộ mã nguồn và cơ sở dữ liệu, cài backdoor lâu dài.",
+    },
+    "CWE-78": {
+        "what": "Tiêm lệnh hệ điều hành (OS Command Injection)",
+        "do": "Lệnh người dùng nhập được truyền cho hàm system/exec/shell_exec mà không lọc, cho phép chạy lệnh shell tùy ý.",
+        "impact": "Thực thi lệnh với quyền của tiến trình web, kiểm soát hoàn toàn máy chủ, đánh cắp dữ liệu, cài mã độc.",
+    },
+    "CWE-506": {
+        "what": "Mã độc được nhúng/che giấu (Embedded Malicious Code)",
+        "do": "Payload độc bị mã hóa (base64/rot13/gzip/XOR) để né các công cụ quét và tường lửa.",
+        "impact": "Phát hiện khó khăn, mã độc tồn tại lâu dài trên hệ thống, hoạt động ngầm khi có điều kiện kích hoạt.",
+    },
+    "CWE-98": {
+        "what": "Nhúng tệp từ xa (Remote File Inclusion - RFI)",
+        "do": "include/require nhận đường dẫn từ người dùng, cho phép nhúng và thực thi mã từ máy chủ khác.",
+        "impact": "Thực thi mã từ xa, tải webshell từ URL ngoài, chiếm quyền máy chủ.",
+    },
+    "CWE-434": {
+        "what": "Tải tệp tin không kiểm soát (Unrestricted File Upload)",
+        "do": "Cho phép tải tệp lên mà không kiểm tra phần mở rộng/nội dung, kẻ tấn công tải webshell lên.",
+        "impact": "Cài webshell trực tiếp vào máy chủ, mở cửa hậu truy cập từ xa bất cứ lúc nào.",
+    },
+    "CWE-522": {
+        "what": "Thông tin xác thực không được bảo vệ",
+        "do": "Mật khẩu/API key/token lưu dạng văn bản thuần trong mã nguồn hoặc cấu hình.",
+        "impact": "Kẻ tấn công đọc được thông tin đăng nhập, truy cập trái phép vào hệ thống và dịch vụ liên quan.",
+    },
+    "CWE-200": {
+        "what": "Lộ thông tin hệ thống (Information Exposure)",
+        "do": "Gọi phpinfo()/show_source lộ cấu hình máy chủ, đường dẫn, phiên bản phần mềm.",
+        "impact": "Cung cấp thông tin để kẻ tấn công lập kế hoạch khai thác các lỗ hổng khác chính xác hơn.",
+    },
+}
+
+def describe_impact(cwe_id):
+    """Trả về dict {what, do, impact} từ mã CWE, hoặc mô tả chung."""
+    if cwe_id in CWE_IMPACT:
+        return CWE_IMPACT[cwe_id]
+    return {
+        "what": "Lệnh/đoạn mã nguy hiểm",
+        "do": "Đoạn mã chứa hàm thực thi hoặc gọi hệ thống với dữ liệu không kiểm soát.",
+        "impact": "Có thể dẫn đến thực thi mã từ xa hoặc rò rỉ thông tin trên máy chủ.",
+    }
+
+def highlight_context(context, value):
+    """Tô đậm (màu đỏ + khung) phần `value` trong `context`, trả về HTML an toàn."""
+    ctx = _html.escape(context or "")
+    val = _html.escape(value or "")
+    if val and val in ctx:
+        # thay lần đầu tiên bằng phiên bản tô màu
+        highlighted = '<mark class="danger-match">' + val + '</mark>'
+        return ctx.replace(val, highlighted, 1)
+    return ctx
+
+
 class ReportGenerator:
     """Exports CSV and Jinja2-rendered HTML reports."""
     
@@ -988,6 +1050,72 @@ class ReportGenerator:
         .td-value { font-family: 'JetBrains Mono', monospace; font-weight: 500; }
         .td-context { font-family: 'JetBrains Mono', monospace; color: var(--text-secondary); }
 
+        /* Khối mã nguồn chứa lệnh nguy hiểm */
+        .code-block {
+            background: #0d1117;
+            border: 1px solid rgba(239, 68, 68, 0.35);
+            border-left: 4px solid #EF4444;
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: #E5E7EB;
+            position: relative;
+            margin: 8px 0 12px 0;
+            white-space: pre-wrap;
+            word-break: break-all;
+            line-height: 1.6;
+        }
+        .code-block .line-num {
+            color: #6B7280;
+            margin-right: 12px;
+            user-select: none;
+            font-weight: 400;
+        }
+        mark.danger-match {
+            background: rgba(239, 68, 68, 0.28);
+            color: #FCA5A5;
+            font-weight: 700;
+            padding: 1px 4px;
+            border-radius: 3px;
+            border: 1px solid #EF4444;
+        }
+        .arrow-hint {
+            color: #EF4444;
+            font-weight: 700;
+            font-size: 0.8rem;
+            margin: 4px 0 8px 20px;
+        }
+
+        /* Ba mục giải thích lỗ hổng */
+        .vuln-explain {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin: 8px 0 16px 0;
+        }
+        .vuln-explain .cell {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 0.82rem;
+        }
+        .vuln-explain .cell .lbl {
+            display: block;
+            font-weight: 700;
+            margin-bottom: 6px;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .vuln-explain .cell.what .lbl { color: #60A5FA; }
+        .vuln-explain .cell.how .lbl { color: #F59E0B; }
+        .vuln-explain .cell.impact .lbl { color: #EF4444; }
+        @media (max-width: 800px) {
+            .vuln-explain { grid-template-columns: 1fr; }
+        }
+
         .arrow {
             transition: transform 0.2s ease;
             color: var(--text-secondary);
@@ -1078,26 +1206,47 @@ class ReportGenerator:
                                 Quyền hạn tệp: <code>{{ r.permissions }}</code> | Định dạng tệp: <code>{{ r.format }}</code>
                             </p>
                         </div>
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th style="width: 50px;">Dòng</th>
-                                    <th style="width: 180px;">Loại rủi ro</th>
-                                    <th style="width: 250px;">Giá trị phát hiện</th>
-                                    <th>Ngữ cảnh dòng</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for f in r.findings %}
-                                <tr>
-                                    <td class="td-line">{{ f.line }}</td>
-                                    <td><span class="badge {{ r.compliance.level.lower() }}">{{ f.type }}</span></td>
-                                    <td class="td-value">{{ f.value }}</td>
-                                    <td class="td-context">{{ f.context }}</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+                        <!-- ===== Danh sách lỗ hổng chi tiết (khung mã + mũi tên + giải thích) ===== -->
+                        {% for f in r.findings %}
+                        <div style="margin-bottom: 18px; border-bottom: 1px solid var(--border-color); padding-bottom: 16px;">
+                            <div style="display:flex; align-items:center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px;">
+                                <span class="badge {{ r.compliance.level.lower() }}">{{ f.type }}</span>
+                                <span class="td-line" style="font-family:'JetBrains Mono',monospace;">Dòng {{ f.line }}</span>
+                                {% if f.cwe_id %}
+                                <span style="font-size:0.72rem; font-family:'JetBrains Mono',monospace; color:#A78BFA;">{{ f.cwe_id }}</span>
+                                {% endif %}
+                                {% if f.cvss_score %}
+                                <span style="font-size:0.72rem; font-family:'JetBrains Mono',monospace; color:#F87171; font-weight:700;">CVSS {{ f.cvss_score }} ({{ f.cvss_severity }})</span>
+                                {% endif %}
+                                {% if f.mitre_id %}
+                                <span style="font-size:0.72rem; font-family:'JetBrains Mono',monospace; color:#60A5FA;">MITRE {{ f.mitre_id }}</span>
+                                {% endif %}
+                            </div>
+
+                            <!-- Khối mã nguồn chứa lệnh nguy hiểm -->
+                            <div class="code-block">
+                                <span class="line-num">{{ f.line }} |</span>{{ highlight_context(f.context, f.value) | safe }}
+                            </div>
+                            <div class="arrow-hint">▲ Lệnh nguy hiểm: <code>{{ f.value }}</code></div>
+
+                            <!-- Ba mục: lỗ hổng gì / làm gì / dẫn đến gì -->
+                            {% set imp = describe_impact(f.cwe_id) %}
+                            <div class="vuln-explain">
+                                <div class="cell what">
+                                    <span class="lbl">🔍 Lỗ hổng gì</span>
+                                    {{ imp.what }}
+                                </div>
+                                <div class="cell how">
+                                    <span class="lbl">⚙️ Kẻ tấn công làm gì</span>
+                                    {{ imp.do }}
+                                </div>
+                                <div class="cell impact">
+                                    <span class="lbl">💥 Dẫn đến hậu quả</span>
+                                    {{ imp.impact }}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
                     </div>
                 </div>
                 {% endif %}
@@ -1157,7 +1306,9 @@ class ReportGenerator:
             avg_score=avg_score,
             pii_counts=pii_counts,
             start_time=self.start_time,
-            duration=self.duration
+            duration=self.duration,
+            highlight_context=highlight_context,
+            describe_impact=describe_impact,
         )
         
         with open(output_path, "w", encoding="utf-8") as f:

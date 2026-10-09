@@ -421,10 +421,20 @@ async function startLoading(targetName, filesArrayOrCount) {
                 console.warn("Loi quet file", file.name, e);
             }
             try { fileText = await readFileAsText(file); } catch (e) { fileText = ''; }
+
+            // Tính hash SHA-256 thật bằng Web Crypto (khả dụng trên HTTPS/localhost)
+            let sha256 = '';
+            try {
+                const bytes = new TextEncoder().encode(fileText);
+                const buf = await crypto.subtle.digest('SHA-256', bytes);
+                sha256 = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+            } catch (e) { sha256 = ''; }
+
             scannedData.push({
                 file: file,
                 findings: findings,
-                text: fileText
+                text: fileText,
+                sha256: sha256
             });
             await new Promise(r => setTimeout(r, 40)); // Small delay for smooth UI
         }
@@ -802,11 +812,12 @@ function classifyMalwareFamily(fileName, text, type) {
 
     // PHP Webshell
     if (type === 'PHP script') {
-        if (has('eval(') || has('assert(') || has('base64_decode') || has('str_rot13') || has('create_function')) {
-            return 'PHP Webshell (eval/assert)';
+        // Ưu tiên phát hiện obfuscation đa lớp (che giấu payload)
+        if (has('gzinflate') || has('gzuncompress') || has('gzdecode')) {
+            return 'PHP Obfuscated Webshell (GZip)';
         }
-        if (has('system(') || has('shell_exec') || has('passthru') || has('exec(') || has('proc_open') || has('popen(')) {
-            return 'PHP Webshell (command exec)';
+        if (has('base64_decode') || has('str_rot13') || has('strrev') || has('hex2bin') || has('pack(')) {
+            return 'PHP Obfuscated Webshell (base64/hex)';
         }
         if (has('fsockopen') || has('stream_socket_client') || has('/dev/tcp/')) {
             return 'PHP Reverse Shell';
@@ -814,8 +825,17 @@ function classifyMalwareFamily(fileName, text, type) {
         if (has('move_uploaded_file') || has('$_FILES')) {
             return 'PHP Upload Backdoor';
         }
-        if (has('base64') || has('gzinflate') || has('gzuncompress') || has('rot13')) {
-            return 'PHP Obfuscated Webshell';
+        if (has('assert(') || has('create_function') || has('preg_replace')) {
+            return 'PHP Webshell (assert/create_function)';
+        }
+        if (has('system(') || has('shell_exec') || has('passthru') || has('proc_open') || has('popen(')) {
+            return 'PHP Webshell (Command Execution)';
+        }
+        if (has('exec(')) {
+            return 'PHP Webshell (exec)';
+        }
+        if (has('eval(')) {
+            return 'PHP Webshell (eval backdoor)';
         }
     }
 
@@ -887,10 +907,10 @@ async function md5Hex(str) {
     return '';
 }
 
-// Phiên bản đồng bộ (không hash SHA-256) dùng ngay trong vòng lặp forEach
-function analyzeMalwareSync(text, fileName, fileSize) {
+// Phiên bản đồng bộ (dùng hash SHA-256 đã tính trước nếu có) gọi trong vòng lặp forEach
+function analyzeMalwareSync(text, fileName, fileSize, precomputedSha256) {
     if (!text || text.length === 0) {
-        return { family: "Không đọc được nội dung", type: "unknown", entropy: 0, entropy_verdict: "—", hashes: {}, iocs: { ips: [], urls: [], domains: [] }, pe_info: {}, file_size: fileSize || 0 };
+        return { family: "Không đọc được nội dung", type: "unknown", entropy: 0, entropy_verdict: "—", hashes: { md5: '', sha1: '', sha256: '' }, iocs: { ips: [], urls: [], domains: [] }, pe_info: {}, file_size: fileSize || 0 };
     }
     const entropy = shannonEntropy(text);
     const type = detectFileType(fileName, text);
@@ -901,7 +921,7 @@ function analyzeMalwareSync(text, fileName, fileSize) {
         type,
         entropy: entropy.toFixed(4),
         entropy_verdict: entropy >= 7.0 ? 'Entropy cao — nghi ngờ packed/encrypted' : entropy >= 6.0 ? 'Entropy trung bình — có thể obfuscated' : 'Entropy bình thường',
-        hashes: { md5: '', sha1: '', sha256: '' },
+        hashes: { md5: '', sha1: '', sha256: precomputedSha256 || '' },
         fuzzy_hash: '',
         iocs,
         pe_info: {},
@@ -1015,7 +1035,7 @@ function processScanResults(targetName, filesArrayOrCount, realData) {
                 entropy: 0,
                 entropyRisk: 'none',
                 riskRating: null,
-                malwareAnalysis: analyzeMalwareSync(item.text || '', item.file.name, item.file.size)
+                malwareAnalysis: analyzeMalwareSync(item.text || '', item.file.name, item.file.size, item.sha256 || '')
             });
         });
     } else {

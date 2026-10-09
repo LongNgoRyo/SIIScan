@@ -104,6 +104,18 @@ function getCvssProfileForMalware(piiName, valueText) {
     return { key: 'webshell_rce', cwe: "CWE-94", mitre: "T1505.003", vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", score: 9.8, severity: "Critical" };
 }
 
+// Tô đỏ phần chuỗi nguy hiểm `needle` trong `context` (dùng cho báo cáo PDF)
+function highlightDanger(context, needle) {
+    if (!context) return '';
+    const safeCtx = String(context).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    if (!needle) return safeCtx;
+    const safeNeedle = String(needle).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    if (safeNeedle && safeCtx.includes(safeNeedle)) {
+        return safeCtx.replace(safeNeedle, '<span style="background:#FEE2E2;color:#B91C1C;font-weight:700;padding:0 3px;border:1px solid #EF4444;border-radius:3px;">' + safeNeedle + '</span>');
+    }
+    return safeCtx;
+}
+
 // Hàm ẩn dữ liệu nhạy cảm để hiển thị an toàn
 function maskPIIValue(type, value) {
     if (!value) return "";
@@ -2071,6 +2083,29 @@ function exportReport() {
         `;
     }
 
+    // ===== Trích đoạn mã nguồn chứa lệnh nguy hiểm (tô khung + mũi tên + giải thích) =====
+    let codeSnippetsHtml = '';
+    scanResults.forEach(res => {
+        const malwareFindings = res.piiFound
+            .flatMap(p => (p.name === "Mã độc & Lệnh nguy hiểm (Webshell/Backdoor)" ? (p.details || []) : []));
+        if (malwareFindings.length === 0) return;
+
+        malwareFindings.slice(0, 5).forEach((det, i) => {
+            const highlighted = highlightDanger(det.text, det.value);
+            codeSnippetsHtml += `
+                <div style="margin-bottom: 16px; padding: 12px; background: #F9FAFB; border: 1px solid #E5E7EB; border-left: 4px solid #EF4444; border-radius: 6px; break-inside: avoid;">
+                    <div style="font-size: 0.78rem; color: #6B7280; font-family: monospace; margin-bottom: 6px;">
+                        📄 ${res.path} — Dòng ${det.line}${det.cwe_id ? ` &nbsp;|&nbsp; ${det.cwe_id}` : ''}${det.cvss_score ? ` &nbsp;|&nbsp; CVSS ${det.cvss_score}` : ''}${det.mitre_id ? ` &nbsp;|&nbsp; MITRE ${det.mitre_id}` : ''}
+                    </div>
+                    <div style="font-family: 'Courier New', monospace; font-size: 0.78rem; background: #0B1220; color: #E5E7EB; padding: 10px 12px; border-radius: 4px; white-space: pre-wrap; word-break: break-all; line-height: 1.5;">
+                        <span style="color:#6B7280;">${det.line} | </span>${highlighted}
+                    </div>
+                    <div style="font-size: 0.72rem; color: #EF4444; font-weight: 700; margin-top: 4px;">▲ Lệnh nguy hiểm: ${String(det.value).replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+                </div>
+            `;
+        });
+    });
+
     // Thiết lập nội dung HTML cho báo cáo in
     reportContainer.innerHTML = `
         <style>
@@ -2337,6 +2372,31 @@ function exportReport() {
                 <span>Trang 4 / 4</span>
             </div>
         </div>
+
+        <!-- TRANG 5: TRÍCH ĐOẠN MÃ NGUỒN CHỨA LỆNH NGUY HIỂM -->
+        ${codeSnippetsHtml ? `
+        <div class="html2pdf__page-break"></div>
+        <div class="pdf-page" style="height: 1040px;">
+            <div class="pdf-header">
+                <h2>PIIScan Server Pro</h2>
+                <span style="font-size: 0.8rem; color: #6B7280;">Báo cáo kiểm toán tuân thủ bảo vệ dữ liệu cá nhân</span>
+            </div>
+
+            <h3 style="color: #1E3A8A; font-size: 1.25rem; margin-top: 0; margin-bottom: 12px; border-left: 4px solid #EF4444; padding-left: 10px;">VI. Trích đoạn Mã nguồn chứa Lệnh Nguy hiểm</h3>
+            <p style="font-size: 0.9rem; color: #4B5563; line-height: 1.5; margin-bottom: 14px;">
+                Các đoạn mã dưới đây là nguồn gốc trực tiếp của lỗ hổng. Phần lệnh nguy hiểm được tô đỏ và có mũi tên chỉ đến, kèm mã CWE, điểm CVSS và kỹ thuật MITRE ATT&CK tương ứng:
+            </p>
+
+            <div style="height: 880px; overflow-y: auto; padding-right: 4px;">
+                ${codeSnippetsHtml}
+            </div>
+
+            <div class="pdf-footer">
+                <span>PIIScan Server Pro v2.5</span>
+                <span>Trang 5 / 5</span>
+            </div>
+        </div>
+        ` : ''}
     `;
 
     document.body.appendChild(reportContainer);

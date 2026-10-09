@@ -1305,7 +1305,7 @@ function renderDetailedGrid(results) {
                 <div class="pii-file-info">
                     <div style="display:flex; align-items:center; gap: 8px;">
                         <span style="font-size: 1.1rem;">${res.piiFound.some(p => p.name === "Mã độc & Lệnh nguy hiểm (Webshell/Backdoor)") ? '💀' : (res.fileName.endsWith('.sql') ? '🗄️' : res.fileName.endsWith('.csv') ? '📊' : '📄')}</span>
-                        <span class="pii-file-path" title="${res.path}">${res.path}</span>
+                        <span class="pii-file-path" title="${res.path}">${res.relativePath || res.path || res.fileName}</span>
                     </div>
                     <div class="pii-file-findings" style="margin-top: 4px;">
                         ${piiBadgesHtml}

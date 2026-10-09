@@ -230,16 +230,27 @@ class PIIScanner:
     
     def __init__(self, target_path, exclude_dirs=None):
         self.target_path = Path(target_path)
-        self.exclude_dirs = exclude_dirs or [".git", "node_modules", "venv", ".idea"]
+        self.exclude_dirs = exclude_dirs or [".git", "node_modules", "venv", ".idea", "__pycache__"]
         self.supported_exts = {
             ".txt", ".csv", ".log", ".json", ".xml", ".pdf", ".docx", ".xlsx",
             ".env", ".config", ".yaml", ".yml", ".ini", ".conf",
             ".php", ".phtml", ".php3", ".php4", ".php5", ".js", ".jsx", ".ts", ".py", ".sql",
             ".asp", ".aspx", ".jsp", ".jspx", ".sh", ".pl", ".cgi", ".rb",
         }
+        # Các phần mở rộng nhị phân KHÔNG thể đọc dưới dạng văn bản — sẽ bỏ qua
+        # để tránh parse rác. Mọi thứ khác (kể cả file không đuôi) đều được quét.
+        self.binary_exts = {
+            ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".ico", ".svg", ".webp",
+            ".mp3", ".mp4", ".wav", ".avi", ".mov", ".mkv", ".flac", ".ogg",
+            ".zip", ".gz", ".tar", ".rar", ".7z", ".jar", ".war", ".ear",
+            ".exe", ".dll", ".so", ".bin", ".dat", ".class", ".o", ".a",
+            ".woff", ".woff2", ".ttf", ".otf", ".eot", ".pdf_img",
+            ".db", ".sqlite", ".sqlite3", ".pyc", ".pyo",
+        }
         
     def scan_directories(self):
-        """Recursively yields files in the target directory."""
+        """Quét ĐỆ QUY toàn bộ thư mục, gồm cả file lạ/không đuôi.
+        Chỉ bỏ qua: thư mục hệ thống (exclude_dirs) và file nhị phân."""
         if not self.target_path.exists():
             print(f"Error: Target path {self.target_path} does not exist.", file=sys.stderr)
             return
@@ -249,14 +260,16 @@ class PIIScanner:
             return
 
         for path in self.target_path.rglob("*"):
-            if path.is_file():
-                # Avoid excluded dirs
-                if any(part in path.parts for part in self.exclude_dirs):
-                    continue
-                
-                # Filter extensions
-                if path.suffix.lower() in self.supported_exts:
-                    yield path
+            if not path.is_file():
+                continue
+            # Bỏ qua các thư mục hệ thống
+            if any(part in path.parts for part in self.exclude_dirs):
+                continue
+            # Bỏ qua file nhị phân (không đọc được dưới dạng text)
+            if path.suffix.lower() in self.binary_exts:
+                continue
+            # Quét MỌI thứ còn lại: code, cấu hình, log, và cả file không đuôi
+            yield path
 
 
 class FileParser:
@@ -1217,9 +1230,19 @@ class PIIScanAPIHandler(BaseHTTPRequestHandler):
             compliance = ComplianceEngine()
             
             scan_results = []
+            target_root = Path(target_path)
             for file_path in scanner.scan_directories():
                 findings = analyzer.analyze_file(file_path)
                 eval_result = compliance.evaluate(file_path, findings)
+                
+                # Đường dẫn tương đối so với thư mục gốc đã quét (hiển thị folder/subfolder)
+                try:
+                    if target_root.is_dir():
+                        rel_path = str(file_path.relative_to(target_root))
+                    else:
+                        rel_path = file_path.name
+                except ValueError:
+                    rel_path = str(file_path)
                 
                 # Deduplicate and group findings by PII type
                 grouped_pii = {}
@@ -1245,6 +1268,7 @@ class PIIScanAPIHandler(BaseHTTPRequestHandler):
                 scan_results.append({
                     "fileName": file_path.name,
                     "path": str(file_path),
+                    "relativePath": rel_path,
                     "format": file_path.suffix.lower(),
                     "level": eval_result["level"].lower() if eval_result["level"] != "Critical" else "high",
                     "securityStatus": "unsecured" if eval_result["is_unsecured"] else ("warning" if eval_result["level"] == "Warning" else "secured"),

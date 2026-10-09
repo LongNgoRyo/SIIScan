@@ -907,15 +907,75 @@ async function md5Hex(str) {
     return '';
 }
 
+// Trả về danh sách "bằng chứng phát hiện" — các mẫu nguy hiểm tìm thấy trong mã, kèm giải thích
+function detectMalwareEvidence(text, fileName, type) {
+    const evidence = [];
+    const has = (s) => text && text.includes(s);
+    const add = (pattern, label, why) => { if (has(pattern)) evidence.push({ pattern, label, why }); };
+
+    if (type === 'PHP script') {
+        add('gzinflate', 'gzinflate()', 'Giải nén payload nén GZip — giấu mã độc trong dữ liệu nén');
+        add('gzuncompress', 'gzuncompress()', 'Giải nén payload — kỹ thuật che giấu mã');
+        add('gzdecode', 'gzdecode()', 'Giải mã GZip để khôi phục mã độc');
+        add('base64_decode', 'base64_decode()', 'Giải mã chuỗi base64 — che giấu payload thực thi');
+        add('str_rot13', 'str_rot13()', 'Giải mã ROT13 — làm rối mã né quét chữ ký');
+        add('strrev', 'strrev()', 'Đảo ngược chuỗi — né phát hiện chuỗi độc');
+        add('hex2bin', 'hex2bin()', 'Chuyển hex sang nhị phân — giấu mã dạng hex');
+        add('assert(', 'assert()', 'Thực thi biểu thức động — backdoor phổ biến');
+        add('create_function', 'create_function()', 'Tạo hàm từ chuỗi — thực thi mã động');
+        add('preg_replace', 'preg_replace()', 'Có thể dùng modifier /e để thực thi mã');
+        add('eval(', 'eval()', 'Thực thi chuỗi như mã PHP — webshell kinh điển');
+        add('system(', 'system()', 'Thực thi lệnh hệ thống');
+        add('shell_exec', 'shell_exec()', 'Thực thi lệnh shell và trả kết quả');
+        add('passthru', 'passthru()', 'Thực thi lệnh và in trực tiếp output');
+        add('proc_open', 'proc_open()', 'Mở tiến trình hệ thống');
+        add('popen(', 'popen()', 'Mở pipe tới tiến trình hệ thống');
+        add('exec(', 'exec()', 'Thực thi lệnh hệ thống');
+        add('fsockopen', 'fsockopen()', 'Mở kết nối socket từ xa (reverse shell)');
+        add('stream_socket_client', 'stream_socket_client()', 'Tạo kết nối socket → reverse shell');
+        add('move_uploaded_file', 'move_uploaded_file()', 'Di chuyển file upload → upload backdoor');
+        add('$_FILES', '$_FILES', 'Nhận file upload từ người dùng');
+        add('$_POST', '$_POST', 'Nhận dữ liệu từ người dùng (nguồn input khả nghi)');
+        add('$_GET', '$_GET', 'Nhận dữ liệu từ URL (nguồn input khả nghi)');
+    } else if (type === 'PowerShell script') {
+        add('IEX', 'IEX (Invoke-Expression)', 'Thực thi chuỗi như lệnh PowerShell');
+        add('Invoke-Expression', 'Invoke-Expression', 'Thực thi mã động');
+        add('DownloadString', 'DownloadString()', 'Tải payload từ URL từ xa');
+        add('WebClient', 'Net.WebClient', 'Đối tượng tải dữ liệu từ internet');
+        add('-EncodedCommand', '-EncodedCommand', 'Chạy lệnh mã hóa base64 (fileless)');
+    } else if (type === 'VBScript') {
+        add('WScript.Shell', 'WScript.Shell', 'Tương tác hệ thống (chạy lệnh, registry)');
+        add('RegWrite', 'RegWrite', 'Ghi registry → persistence (tự khởi động)');
+        add('CurrentVersion', 'CurrentVersion\\Run', 'Key registry tự chạy khi khởi động');
+    } else if (type === 'Python script') {
+        add('socket', 'import socket', 'Thư viện mạng → kết nối C2');
+        add('connect', '.connect()', 'Kết nối tới máy chủ từ xa');
+        add('recv', '.recv()', 'Nhận lệnh từ máy chủ C2');
+        add('subprocess', 'subprocess', 'Thực thi lệnh hệ thống');
+        add('os.system', 'os.system()', 'Thực thi lệnh hệ thống');
+    } else if (type === 'Batch script') {
+        add('del /', 'del /f', 'Xóa file hàng loạt (wiper)');
+        add('format ', 'format', 'Format ổ đĩa (phá hoại)');
+        add('shutdown', 'shutdown', 'Tắt máy từ xa');
+    } else if (type === 'Shell script') {
+        add('/dev/tcp/', '/dev/tcp/', 'Reverse shell qua TCP');
+        add('nc -e', 'nc -e', 'Netcat bind shell');
+        add('bash -i', 'bash -i', 'Interactive shell → reverse shell');
+    }
+
+    return evidence;
+}
+
 // Phiên bản đồng bộ (dùng hash SHA-256 đã tính trước nếu có) gọi trong vòng lặp forEach
 function analyzeMalwareSync(text, fileName, fileSize, precomputedSha256) {
     if (!text || text.length === 0) {
-        return { family: "Không đọc được nội dung", type: "unknown", entropy: 0, entropy_verdict: "—", hashes: { md5: '', sha1: '', sha256: '' }, iocs: { ips: [], urls: [], domains: [] }, pe_info: {}, file_size: fileSize || 0 };
+        return { family: "Không đọc được nội dung", type: "unknown", entropy: 0, entropy_verdict: "—", hashes: { md5: '', sha1: '', sha256: '' }, iocs: { ips: [], urls: [], domains: [] }, pe_info: {}, evidence: [], file_size: fileSize || 0 };
     }
     const entropy = shannonEntropy(text);
     const type = detectFileType(fileName, text);
     const iocs = extractIocs(text);
     const family = classifyMalwareFamily(fileName, text, type);
+    const evidence = detectMalwareEvidence(text, fileName, type);
     return {
         family,
         type,
@@ -925,6 +985,7 @@ function analyzeMalwareSync(text, fileName, fileSize, precomputedSha256) {
         fuzzy_hash: '',
         iocs,
         pe_info: {},
+        evidence,
         file_size: fileSize || text.length
     };
 }
@@ -1487,6 +1548,18 @@ function populateMalwareTab() {
                 </div>
 
                 ${peHtml}
+
+                ${ma.evidence && ma.evidence.length ? `
+                <div style="margin-top:12px;">
+                    <div style="font-weight:600; color:#EF4444; font-size:0.78rem; margin-bottom:6px;">🧪 Bằng chứng phát hiện (vì sao bị nhận diện)</div>
+                    <div style="display:flex; flex-direction:column; gap:5px;">
+                        ${ma.evidence.map(ev => `
+                        <div style="display:flex; align-items:flex-start; gap:8px; padding:6px 10px; background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.15); border-radius:5px; font-size:0.72rem;">
+                            <code style="color:#F87171; font-family:var(--font-mono); font-weight:700; white-space:nowrap;">${ev.label}</code>
+                            <span style="color:var(--text-secondary); line-height:1.4;">${ev.why}</span>
+                        </div>`).join('')}
+                    </div>
+                </div>` : ''}
 
                 <div style="margin-top:12px;">
                     <div style="font-weight:600; color:#F59E0B; font-size:0.78rem; margin-bottom:6px;">🎯 IoCs (Indicators of Compromise)</div>

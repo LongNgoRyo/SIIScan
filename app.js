@@ -77,6 +77,33 @@ function signatureBadge(ruleId, ruleName) {
     return `<span class="sig-badge" title="Rule: ${ruleName}" style="display:inline-flex; align-items:center; gap:4px; background:rgba(16,185,129,0.12); color:#34D399; border:1px solid rgba(16,185,129,0.35); padding:2px 8px; border-radius:4px; font-size:0.68rem; font-weight:600; font-family:var(--font-mono);">🔎 ${ruleId}</span>`;
 }
 
+// Bảng CVSS 3.1 + CWE + MITRE (đồng bộ với cvss_scoring.py ở backend)
+const MALWARE_CVSS_PROFILES = [
+    { key: 'reverse_shell',     names: ["reverse", "kết nối ngược"], cwe: "CWE-78",  mitre: "T1071", vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H", score: 10.0, severity: "Critical" },
+    { key: 'command_execution', names: ["system", "exec", "shell_exec", "passthru", "proc_open", "popen", "command execution", "lệnh thực thi"], cwe: "CWE-78", mitre: "T1059", vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", score: 9.8, severity: "Critical" },
+    { key: 'code_eval',         names: ["eval", "assert", "create_function"], cwe: "CWE-94", mitre: "T1059", vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", score: 9.8, severity: "Critical" },
+    { key: 'obfuscation',       names: ["obfuscation", "base64", "rot13", "giải mã", "che giấu"], cwe: "CWE-506", mitre: "T1027", vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", score: 9.8, severity: "Critical" },
+    { key: 'remote_file_inclusion', names: ["include", "require", "remote", "file từ biến"], cwe: "CWE-98", mitre: "T1190", vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", score: 9.8, severity: "Critical" },
+    { key: 'file_upload',       names: ["upload", "move_uploaded_file", "tải tệp"], cwe: "CWE-434", mitre: "T1190", vector: "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H", score: 8.7, severity: "High" },
+    { key: 'credential_exposure', names: ["mật khẩu", "api key", "thông tin xác thực", "token", "credential"], cwe: "CWE-522", mitre: "T1552", vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N", score: 7.5, severity: "High" },
+    { key: 'sql_dump_exposure', names: ["csdl", "bản sao lưu", "sql", "database"], cwe: "CWE-538", mitre: "T1213", vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N", score: 7.5, severity: "High" },
+];
+
+function getCvssProfileForMalware(piiName, valueText) {
+    // Chỉ áp dụng cho loại mã độc
+    if (piiName !== "Mã độc & Lệnh nguy hiểm (Webshell/Backdoor)") {
+        return null;
+    }
+    const hay = (piiName + ' ' + (valueText || '')).toLowerCase();
+    for (const prof of MALWARE_CVSS_PROFILES) {
+        if (prof.names.some(n => hay.includes(n))) {
+            return prof;
+        }
+    }
+    // mặc định webshell RCE
+    return { key: 'webshell_rce', cwe: "CWE-94", mitre: "T1505.003", vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", score: 9.8, severity: "Critical" };
+}
+
 // Hàm ẩn dữ liệu nhạy cảm để hiển thị an toàn
 function maskPIIValue(type, value) {
     if (!value) return "";
@@ -673,15 +700,61 @@ function processScanResults(targetName, filesArrayOrCount, realData) {
                 scanStats.securedFiles++;
             }
 
+            // Xác định CVSS + CWE + MITRE từ findings (cho luồng upload client-side)
+            let fileCvss = null;
+            let fileCwe = '';
+            let fileMitre = '';
+            item.findings.forEach(f => {
+                // Tìm finding mã độc và lấy profile CVSS phù hợp
+                if (f.name === "Mã độc & Lệnh nguy hiểm (Webshell/Backdoor)") {
+                    const prof = getCvssProfileForMalware(f.name, (f.details && f.details[0] && f.details[0].value) || '');
+                    if (prof) {
+                        if (!fileCvss || prof.score > fileCvss.score) {
+                            fileCvss = prof;
+                            fileCwe = prof.cwe;
+                            fileMitre = prof.mitre;
+                        }
+                    }
+                }
+            });
+
+            // Đính kèm CVSS/CWE/MITRE vào từng detail của finding mã độc
+            const enrichedFindings = item.findings.map(f => {
+                if (f.name === "Mã độc & Lệnh nguy hiểm (Webshell/Backdoor)") {
+                    const prof = getCvssProfileForMalware(f.name, (f.details && f.details[0] && f.details[0].value) || '');
+                    if (prof) {
+                        return {
+                            ...f,
+                            details: (f.details || []).map(d => ({
+                                ...d,
+                                cwe_id: prof.cwe,
+                                mitre_id: prof.mitre,
+                                cvss_score: prof.score,
+                                cvss_severity: prof.severity,
+                                cvss_vector: prof.vector,
+                            }))
+                        };
+                    }
+                }
+                return f;
+            });
+
             scanResults.push({
                 fileName: item.file.name,
                 path: item.file.webkitRelativePath || item.file.name,
                 level: highestLevel,
                 securityStatus: securityStatus,
-                piiFound: item.findings,
+                piiFound: enrichedFindings,
                 permissions: permissions,
                 size: formatBytes(item.file.size),
-                date: new Date(item.file.lastModified || Date.now()).toISOString().split('T')[0]
+                date: new Date(item.file.lastModified || Date.now()).toISOString().split('T')[0],
+                cvss: fileCvss ? { score: fileCvss.score, severity: fileCvss.severity, vector: fileCvss.vector } : null,
+                cwe: fileCwe,
+                mitre: fileMitre,
+                signatures: [],
+                entropy: 0,
+                entropyRisk: 'none',
+                riskRating: null
             });
         });
     } else {

@@ -1261,49 +1261,78 @@ function populateComplianceTab() {
     const behaviorContent = document.getElementById('behaviorContent');
     if (!behaviorContent) return;
 
-    let overallRating = "AN TOÀN / TUÂN THỦ";
-    let ratingColor = "var(--color-clean)";
-    let reportSummary = "Hệ thống đáp ứng các tiêu chuẩn cơ bản về bảo vệ dữ liệu cá nhân. Không phát hiện tệp tin văn bản thô chưa bảo mật chứa dữ liệu nhạy cảm.";
+    // ===== Phân loại kết quả quét thành 2 nhóm riêng biệt =====
+    const CLOSE_MALWARE = "Mã độc & Lệnh nguy hiểm (Webshell/Backdoor)";
 
-    const unsecuredHigh = scanResults.filter(r => r.securityStatus === 'unsecured' && r.level === 'high').length;
-    const unsecuredMed = scanResults.filter(r => r.securityStatus === 'unsecured' && r.level === 'medium').length;
+    // 1. File chứa mã độc (malware/webshell/backdoor)
+    const malwareFiles = scanResults.filter(r =>
+        r.piiFound.some(p => p.name === CLOSE_MALWARE)
+    );
+    // 2. File chứa DLCN (PII) — không phải mã độc
+    const piiFiles = scanResults.filter(r =>
+        r.piiFound.some(p => p.name !== CLOSE_MALWARE)
+    );
 
+    const hasMalware = malwareFiles.length > 0;
+    const hasPii = piiFiles.length > 0;
+
+    // Phân loại PII theo mức độ
+    const highPii = scanResults.filter(r =>
+        r.securityStatus === 'unsecured' && r.level === 'high' &&
+        !r.piiFound.some(p => p.name === CLOSE_MALWARE)
+    ).length;
+    const medPii = scanResults.filter(r =>
+        r.securityStatus === 'unsecured' && r.level === 'medium'
+    ).length;
+    const publicPermFiles = scanResults.filter(r => r.permissions && r.permissions.includes("777")).length;
+
+    // ===== Xác định trạng thái tổng thể =====
+    let overallRating, ratingColor, reportSummary;
     if (isRemediated) {
         overallRating = "TUÂN THỦ (ĐÃ KHẮC PHỤC)";
         ratingColor = "var(--color-clean)";
-        reportSummary = "Tất cả các tệp tin chứa dữ liệu cá nhân nhạy cảm và mã độc đã được cách ly, mã hóa AES-256 và giới hạn quyền truy cập hệ thống tệp (CHMOD 600). Hệ thống hiện đã an toàn.";
-    } else if (unsecuredHigh > 0) {
-        overallRating = "KHÔNG TUÂN THỦ (NGUY CƠ CAO)";
+        reportSummary = "Tất cả mã độc đã được cách ly và dữ liệu cá nhân nhạy cảm đã được mã hóa AES-256 + giới hạn quyền CHMOD 600. Hệ thống hiện đã an toàn.";
+    } else if (hasMalware) {
+        overallRating = "NGUY HIỂM (PHÁT HIỆN MÃ ĐỘC)";
         ratingColor = "var(--color-malicious)";
-        const hasMalware = scanResults.some(r => r.securityStatus === 'unsecured' && r.piiFound.some(p => p.name === "Mã độc & Lệnh nguy hiểm (Webshell/Backdoor)"));
-        if (hasMalware) {
-            reportSummary = "CẢNH BÁO NGUY HIỂM: Phát hiện mã độc, backdoor hoặc câu lệnh hệ thống nguy hiểm chưa được xử lý, cùng các tệp rò rỉ dữ liệu cá nhân nhạy cảm. Nguy cơ bị chiếm quyền kiểm soát server và thất thoát dữ liệu cực kỳ nghiêm trọng.";
-        } else {
-            reportSummary = `Phát hiện ${unsecuredHigh} tệp tin chứa dữ liệu cá nhân nhạy cảm (Số định danh CCCD, Số thẻ tín dụng, Tài khoản ngân hàng, Mật khẩu) đang được lưu trữ dưới dạng văn bản thô (Plaintext) với quyền truy cập lỏng lẻo. Vi phạm trực tiếp Nghị định 13/2023/NĐ-CP (Điều 36) và tiêu chuẩn PCI-DSS (Yêu cầu 3).`;
-        }
-    } else if (unsecuredMed > 0) {
-        overallRating = "TUÂN THỦ MỘT PHẦN (CẢNH BÁO)";
+        reportSummary = `Phát hiện ${malwareFiles.length} tệp tin chứa mã độc (webshell/backdoor). Hệ thống có thể đã bị xâm nhập — kẻ tấn công có khả năng thực thi lệnh từ xa, đánh cắp dữ liệu và duy trì quyền truy cập ngầm.`;
+    } else if (hasPii) {
+        overallRating = "KHÔNG TUÂN THỦ (RÒ RỈ DLCN)";
         ratingColor = "var(--color-warning)";
-        reportSummary = `Phát hiện ${unsecuredMed} tệp tin lưu trữ dữ liệu cá nhân cơ bản (Số điện thoại, Họ tên, Địa chỉ) trong các thư mục dùng chung hoặc phân quyền chưa chặt chẽ. Khuyến nghị cấu hình thắt chặt phân quyền truy cập.`;
+        reportSummary = `Phát hiện ${piiFiles.length} tệp tin chứa dữ liệu cá nhân chưa mã hóa (DLCN văn bản thô). Không phát hiện mã độc, nhưng tồn tại nguy cơ rò rỉ dữ liệu cá nhân vi phạm Nghị định 13/2023/NĐ-CP.`;
+    } else {
+        overallRating = "AN TOÀN / TUÂN THỦ";
+        ratingColor = "var(--color-clean)";
+        reportSummary = "Không phát hiện mã độc hay dữ liệu cá nhân lộ dưới dạng văn bản thô. Hệ thống đáp ứng các tiêu chuẩn bảo mật cơ bản.";
     }
 
-    // Đánh giá các tiêu chí theo checklist pháp lý và bảo mật
-    const nd13Status = (isRemediated || (unsecuredMed === 0 && unsecuredHigh === 0)) ? "ĐẠT" : "KHÔNG ĐẠT";
-    const pcidssStatus = (isRemediated || unsecuredHigh === 0) ? "ĐẠT" : "KHÔNG ĐẠT";
-    const accessControlStatus = (isRemediated || scanResults.filter(r => r.permissions.includes("777")).length === 0) ? "ĐẠT" : "KHÔNG ĐẠT";
+    // ===== Đánh giá từng tiêu chuẩn riêng biệt =====
+    const nd13Status = (isRemediated || (!hasPii && !hasMalware)) ? "ĐẠT" : "KHÔNG ĐẠT";
+    const pciStatus = (isRemediated || highPii === 0) ? "ĐẠT" : "KHÔNG ĐẠT";
+    const isoStatus = (isRemediated || publicPermFiles === 0) ? "ĐẠT" : "KHÔNG ĐẠT";
+    const malwareStatus = (isRemediated || !hasMalware) ? "ĐẠT" : "KHÔNG ĐẠT";
+    const owaspStatus = (isRemediated || !hasMalware) ? "ĐẠT" : "KHÔNG ĐẠT";
 
     behaviorContent.innerHTML = `
         <div class="detail-card" style="margin-bottom: 24px;">
             <h4>📈 Kết quả Đánh giá Tuân thủ Bảo mật Dữ liệu</h4>
-            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">Đánh giá hiện trạng bảo mật dữ liệu dựa trên việc phân tích cấu hình phân quyền và dữ liệu lưu trữ thực tế trên máy chủ.</p>
+            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">Đánh giá hiện trạng bảo mật dựa trên phân tích mã độc, phân quyền và dữ liệu lưu trữ thực tế trên máy chủ.</p>
             <div class="detail-table">
                 <div class="detail-row" style="display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--border-color);">
-                    <span class="detail-label" style="font-weight:600;">Trạng thái Tuân thủ Tổng thể (NĐ 13 / PCI-DSS / ISO 27001)</span>
+                    <span class="detail-label" style="font-weight:600;">Trạng thái Tuân thủ Tổng thể</span>
                     <span class="detail-val" style="color: ${ratingColor}; font-weight: bold; font-size: 1.05rem;">${overallRating}</span>
                 </div>
                 <div class="detail-row" style="display:flex; justify-content:space-between; align-items:start; padding:12px 0;">
                     <span class="detail-label" style="font-weight:600; width: 250px;">Kết luận Kiểm toán</span>
                     <span class="detail-val" style="text-align: right; color: var(--text-secondary); line-height: 1.5;">${reportSummary}</span>
+                </div>
+                <div class="detail-row" style="display:flex; justify-content:space-between; align-items:center; padding:12px 0;">
+                    <span class="detail-label" style="font-weight:600;">Tệp mã độc phát hiện</span>
+                    <span class="detail-val" style="color: ${hasMalware ? 'var(--color-malicious)' : 'var(--color-clean)'}; font-weight: bold;">${malwareFiles.length} tệp</span>
+                </div>
+                <div class="detail-row" style="display:flex; justify-content:space-between; align-items:center; padding:12px 0;">
+                    <span class="detail-label" style="font-weight:600;">Tệp chứa DLCN chưa bảo mật</span>
+                    <span class="detail-val" style="color: ${hasPii ? 'var(--color-warning)' : 'var(--color-clean)'}; font-weight: bold;">${piiFiles.length} tệp</span>
                 </div>
             </div>
         </div>
@@ -1312,38 +1341,67 @@ function populateComplianceTab() {
             <h4>📋 Bảng kiểm toán Quy định Pháp lý & Tiêu chuẩn Bảo mật</h4>
             <div class="compliance-grid">
                 
+                <!-- 1. Mã độc / Webshell (quan trọng nhất) -->
+                <div class="compliance-card">
+                    <div class="compliance-status-icon">${malwareStatus === 'ĐẠT' ? '🟢' : '🔴'}</div>
+                    <div class="compliance-details">
+                        <div class="compliance-article">LUẬT AN NINH MẠNG - ĐIỀU 8 & 19</div>
+                        <div class="compliance-title">Phòng chống Mã độc & Tấn công mạng</div>
+                        <div class="compliance-desc">Nghiêm cấm và yêu cầu ngăn chặn hành vi phát tán mã độc, cài backdoor, chiếm quyền điều khiển hệ thống thông tin. Máy chủ không được tồn tại webshell hoặc mã thực thi lệnh trái phép.</div>
+                        <div class="compliance-status-text ${malwareStatus === 'ĐẠT' ? 'pass' : 'fail'}">
+                            <span>Hiện trạng:</span> ${malwareStatus === 'ĐẠT' ? 'ĐẠT (Không phát hiện mã độc)' : `KHÔNG ĐẠT (Phát hiện ${malwareFiles.length} tệp mã độc / webshell)`}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. Nghị định 13 DLCN -->
                 <div class="compliance-card">
                     <div class="compliance-status-icon">${nd13Status === 'ĐẠT' ? '🟢' : '🔴'}</div>
                     <div class="compliance-details">
                         <div class="compliance-article">NGHỊ ĐỊNH 13/2023/NĐ-CP - ĐIỀU 36 & 37</div>
-                        <div class="compliance-title">Biện pháp Bảo vệ Dữ liệu Cá nhân (DLCN)</div>
-                        <div class="compliance-desc">Yêu cầu bên kiểm soát và xử lý dữ liệu phải áp dụng các biện pháp quản lý và kỹ thuật phù hợp (như mã hóa, kiểm soát truy cập) để bảo vệ DLCN, đặc biệt là dữ liệu cá nhân nhạy cảm, tránh rò rỉ dữ liệu dạng văn bản thô.</div>
+                        <div class="compliance-title">Bảo vệ Dữ liệu Cá nhân (DLCN)</div>
+                        <div class="compliance-desc">Yêu cầu áp dụng biện pháp quản lý và kỹ thuật (mã hóa, kiểm soát truy cập) để bảo vệ DLCN, tránh rò rỉ dữ liệu nhạy cảm dạng văn bản thô.</div>
                         <div class="compliance-status-text ${nd13Status === 'ĐẠT' ? 'pass' : 'fail'}">
-                            <span>Hiện trạng:</span> ${nd13Status === 'ĐẠT' ? 'ĐẠT (Đã áp dụng các biện pháp bảo vệ dữ liệu thích hợp)' : 'KHÔNG ĐẠT (Phát hiện dữ liệu cá nhân để lộ dưới dạng văn bản thô)'}
+                            <span>Hiện trạng:</span> ${nd13Status === 'ĐẠT' ? 'ĐẠT (Dữ liệu được bảo vệ đúng quy định)' : 'KHÔNG ĐẠT (Dữ liệu cá nhân để lộ dạng văn bản thô)'}
                         </div>
                     </div>
                 </div>
 
+                <!-- 3. PCI-DSS -->
                 <div class="compliance-card">
-                    <div class="compliance-status-icon">${pcidssStatus === 'ĐẠT' ? '🟢' : '🔴'}</div>
+                    <div class="compliance-status-icon">${pciStatus === 'ĐẠT' ? '🟢' : '🔴'}</div>
                     <div class="compliance-details">
                         <div class="compliance-article">PCI-DSS - YÊU CẦU 3</div>
-                        <div class="compliance-title">Bảo vệ Dữ liệu Chủ thẻ & Dữ liệu Giao dịch</div>
-                        <div class="compliance-desc">Yêu cầu bắt buộc mã hóa mạnh, ẩn hoặc cắt cụt các thông tin thẻ tín dụng, số tài khoản ngân hàng, thông tin tài chính cá nhân khi lưu trữ trên máy chủ.</div>
-                        <div class="compliance-status-text ${pcidssStatus === 'ĐẠT' ? 'pass' : 'fail'}">
-                            <span>Hiện trạng:</span> ${pcidssStatus === 'ĐẠT' ? 'ĐẠT (Thông tin thanh toán đã được mã hóa hoặc cô lập an toàn)' : 'KHÔNG ĐẠT (Phát hiện thông tin thẻ/tài khoản lưu trữ không an toàn)'}
+                        <div class="compliance-title">Bảo vệ Dữ liệu Chủ thẻ & Giao dịch</div>
+                        <div class="compliance-desc">Bắt buộc mã hóa mạnh, ẩn hoặc cắt cụt thông tin thẻ tín dụng, số tài khoản ngân hàng khi lưu trữ trên máy chủ.</div>
+                        <div class="compliance-status-text ${pciStatus === 'ĐẠT' ? 'pass' : 'fail'}">
+                            <span>Hiện trạng:</span> ${pciStatus === 'ĐẠT' ? 'ĐẠT (Thông tin thanh toán được bảo vệ)' : 'KHÔNG ĐẠT (Thông tin thẻ/tài khoản lưu trữ không an toàn)'}
                         </div>
                     </div>
                 </div>
 
+                <!-- 4. ISO 27001 -->
                 <div class="compliance-card">
-                    <div class="compliance-status-icon">${accessControlStatus === 'ĐẠT' ? '🟢' : '🔴'}</div>
+                    <div class="compliance-status-icon">${isoStatus === 'ĐẠT' ? '🟢' : '🔴'}</div>
                     <div class="compliance-details">
                         <div class="compliance-article">ISO/IEC 27001 - KIỂM SOÁT A.8.24 & A.5.15</div>
                         <div class="compliance-title">Kiểm soát Truy cập & Quản lý Khóa mật mã</div>
-                        <div class="compliance-desc">Đảm bảo các tệp cấu hình quan trọng (.env, database.config) và tệp chứa DLCN được phân quyền chặt chẽ (CHMOD 600), ngăn chặn quyền đọc/ghi công khai trên phân vùng đĩa.</div>
-                        <div class="compliance-status-text ${accessControlStatus === 'ĐẠT' ? 'pass' : 'fail'}">
-                            <span>Hiện trạng:</span> ${accessControlStatus === 'ĐẠT' ? 'ĐẠT (Quyền truy cập tệp tin được giới hạn an toàn)' : 'KHÔNG ĐẠT (Phát hiện tệp cấu hình hoặc dữ liệu nhạy cảm có quyền đọc/ghi công khai)'}
+                        <div class="compliance-desc">Tệp cấu hình quan trọng (.env, database.config) và tệp chứa DLCN phải phân quyền chặt chẽ (CHMOD 600), ngăn quyền đọc/ghi công khai.</div>
+                        <div class="compliance-status-text ${isoStatus === 'ĐẠT' ? 'pass' : 'fail'}">
+                            <span>Hiện trạng:</span> ${isoStatus === 'ĐẠT' ? 'ĐẠT (Quyền truy cập được giới hạn an toàn)' : 'KHÔNG ĐẠT (Tệp cấu hình/nhạy cảm có quyền đọc/ghi công khai)'}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 5. OWASP Top 10 -->
+                <div class="compliance-card">
+                    <div class="compliance-status-icon">${owaspStatus === 'ĐẠT' ? '🟢' : '🔴'}</div>
+                    <div class="compliance-details">
+                        <div class="compliance-article">OWASP TOP 10 - A03:2021 INJECTION</div>
+                        <div class="compliance-title">Ngăn chặn Tiêm mã & Thực thi lệnh</div>
+                        <div class="compliance-desc">Ứng dụng phải ngăn chặn tiêm mã (Code/Command Injection) — là nguyên nhân dẫn đến webshell và RCE. Hàm thực thi lệnh không được tiếp nhận dữ liệu người dùng.</div>
+                        <div class="compliance-status-text ${owaspStatus === 'ĐẠT' ? 'pass' : 'fail'}">
+                            <span>Hiện trạng:</span> ${owaspStatus === 'ĐẠT' ? 'ĐẠT (Không phát hiện điểm tiêm mã)' : 'KHÔNG ĐẠT (Phát hiện mã độc thực thi lệnh hệ thống)'}
                         </div>
                     </div>
                 </div>
@@ -1357,13 +1415,16 @@ function populateComplianceTab() {
             
             <div style="background: rgba(255, 255, 255, 0.02); padding: 16px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); margin-bottom: 20px; display: flex; flex-direction: column; gap: 8px;">
                 <div style="font-size: 0.9rem; color: var(--text-primary); display:flex; align-items:center; gap: 8px;">
-                    <span>🔐</span> <strong>Mã hóa AES-256:</strong> Tiến hành mã hóa nội dung của ${scanResults.filter(r => r.level === 'high').length} tệp tin chứa dữ liệu có mức độ nhạy cảm cao.
+                    <span>🛡️</span> <strong>${hasMalware ? 'Cách ly mã độc: ' + malwareFiles.length + ' tệp webshell/backdoor cần đổi sang đuôi .quarantine và thu hồi quyền thực thi.' : 'Cách ly mã độc: Không có mã độc để xử lý.'}</strong>
                 </div>
                 <div style="font-size: 0.9rem; color: var(--text-primary); display:flex; align-items:center; gap: 8px;">
-                    <span>🛡️</span> <strong>Thắt chặt Phân quyền (CHMOD):</strong> Thu hồi toàn bộ quyền truy cập công khai/nhóm, thiết lập các tệp tin chứa DLCN về CHMOD 600 (Chủ sở hữu).
+                    <span>🔐</span> <strong>Mã hóa AES-256:</strong> Mã hóa nội dung các tệp tin chứa dữ liệu cá nhân nhạy cảm.
                 </div>
                 <div style="font-size: 0.9rem; color: var(--text-primary); display:flex; align-items:center; gap: 8px;">
-                    <span>📋</span> <strong>Ghi Nhật ký Kiểm toán:</strong> Kết xuất báo cáo chi tiết không ẩn thông tin phục vụ công tác rà soát nội bộ của quản trị viên hệ thống.
+                    <span>🔒</span> <strong>Thắt chặt Phân quyền (CHMOD):</strong> Thu hồi quyền truy cập công khai/nhóm, thiết lập tệp nhạy cảm về CHMOD 600.
+                </div>
+                <div style="font-size: 0.9rem; color: var(--text-primary); display:flex; align-items:center; gap: 8px;">
+                    <span>📋</span> <strong>Ghi Nhật ký Kiểm toán:</strong> Kết xuất báo cáo chi tiết phục vụ rà soát nội bộ.
                 </div>
             </div>
 

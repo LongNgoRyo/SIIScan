@@ -988,12 +988,14 @@ function computeSecurityScore() {
         securityScore -= (lowCount * 3);
 
         if (highCount > 0) {
-            securityScore = Math.max(10, Math.min(40, 60 - highCount * 10));
+            // Có mã độc/RCE (Critical) => NGHIÊM TRỌNG, chặn trần ở vùng đỏ (< 20)
+            securityScore = Math.max(5, Math.min(18, 20 - highCount * 2));
         } else if (mediumCount > 0) {
-            securityScore = Math.max(50, Math.min(79, 85 - mediumCount * 5));
+            // Cảnh báo trung bình => vùng vàng/cam (40-69)
+            securityScore = Math.max(40, Math.min(69, 75 - mediumCount * 5));
         }
-        if (securityScore < 10 && (highCount > 0 || mediumCount > 0 || lowCount > 0)) {
-            securityScore = 10;
+        if (securityScore < 5 && (highCount > 0 || mediumCount > 0 || lowCount > 0)) {
+            securityScore = 5;
         }
     }
     return securityScore;
@@ -1019,30 +1021,36 @@ function updateScoreRing() {
     
     ringFill.style.strokeDashoffset = circumference;
     
+    // Thang màu 5 mức theo mức độ nghiêm trọng:
+    // Xanh (>=80) An toàn | Xanh dương (60-79) Yếu | Vàng (40-59) Trung bình
+    // Cam (20-39) Cao | Đỏ (<20) Nghiêm trọng (RCE/mã độc)
+    let ringColor, labelText;
     if (securityScore >= 80) {
-        ringFill.style.stroke = 'var(--color-clean)';
-        if (scoreLabel) {
-            scoreLabel.textContent = "A - An toàn";
-            scoreLabel.style.color = "var(--color-clean)";
-        }
-        document.getElementById('fileIconBig').style.borderColor = "var(--color-clean)";
-        document.getElementById('fileIconBig').style.color = "var(--color-clean)";
-    } else if (securityScore >= 50) {
-        ringFill.style.stroke = 'var(--color-warning)';
-        if (scoreLabel) {
-            scoreLabel.textContent = "C - Cảnh báo";
-            scoreLabel.style.color = "var(--color-warning)";
-        }
-        document.getElementById('fileIconBig').style.borderColor = "var(--color-warning)";
-        document.getElementById('fileIconBig').style.color = "var(--color-warning)";
+        ringColor = '#10B981';            // Xanh lá — An toàn
+        labelText = "A - An toàn";
+    } else if (securityScore >= 60) {
+        ringColor = '#3B82F6';            // Xanh dương — Yếu
+        labelText = "B - Yếu";
+    } else if (securityScore >= 40) {
+        ringColor = '#F59E0B';            // Vàng — Trung bình
+        labelText = "C - Trung bình";
+    } else if (securityScore >= 20) {
+        ringColor = '#F97316';            // Cam — Cao
+        labelText = "D - Cao";
     } else {
-        ringFill.style.stroke = 'var(--color-malicious)';
-        if (scoreLabel) {
-            scoreLabel.textContent = "F - Nguy cơ cao";
-            scoreLabel.style.color = "var(--color-malicious)";
-        }
-        document.getElementById('fileIconBig').style.borderColor = "var(--color-malicious)";
-        document.getElementById('fileIconBig').style.color = "var(--color-malicious)";
+        ringColor = '#EF4444';            // Đỏ — Nghiêm trọng
+        labelText = "F - Nghiêm trọng (RCE)";
+    }
+
+    ringFill.style.stroke = ringColor;
+    if (scoreLabel) {
+        scoreLabel.textContent = labelText;
+        scoreLabel.style.color = ringColor;
+    }
+    const iconEl = document.getElementById('fileIconBig');
+    if (iconEl) {
+        iconEl.style.borderColor = ringColor;
+        iconEl.style.color = ringColor;
     }
     
     setTimeout(() => {
@@ -1805,20 +1813,31 @@ function exportReport() {
     // Lấy điểm số an toàn hiện tại (tính tập trung)
     const securityScore = computeSecurityScore();
 
+    // Thang màu 5 mức đồng bộ với vòng điểm
     let overallRating = "AN TOÀN / TUÂN THỦ";
     let ratingColor = "#10B981";
     let ratingClass = "pass";
     if (!isRemediated) {
-        const highCount = scanStats.high || 0;
-        const mediumCount = scanStats.medium || 0;
-        if (highCount > 0) {
-            overallRating = "KHÔNG TUÂN THỦ (NGUY CƠ CAO)";
-            ratingColor = "#EF4444";
-            ratingClass = "fail";
-        } else if (mediumCount > 0) {
-            overallRating = "TUÂN THỦ MỘT PHẦN (CẢNH BÁO)";
+        if (securityScore >= 80) {
+            overallRating = "AN TOÀN / TUÂN THỦ";
+            ratingColor = "#10B981";
+            ratingClass = "pass";
+        } else if (securityScore >= 60) {
+            overallRating = "YẾU (CẦN CẢI THIỆN)";
+            ratingColor = "#3B82F6";
+            ratingClass = "warn";
+        } else if (securityScore >= 40) {
+            overallRating = "TRUNG BÌNH (CẢNH BÁO)";
             ratingColor = "#F59E0B";
             ratingClass = "warn";
+        } else if (securityScore >= 20) {
+            overallRating = "CAO (KHÔNG TUÂN THỦ)";
+            ratingColor = "#F97316";
+            ratingClass = "fail";
+        } else {
+            overallRating = "NGHIÊM TRỌNG (RCE / MÃ ĐỘC)";
+            ratingColor = "#EF4444";
+            ratingClass = "fail";
         }
     }
 

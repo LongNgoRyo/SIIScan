@@ -966,16 +966,65 @@ function detectMalwareEvidence(text, fileName, type) {
     return evidence;
 }
 
+// Giải mã payload bị ẩn (hex2bin, base64_decode, str_rot13) để hiển thị nội dung thật
+function decodePayload(text) {
+    const decoded = [];
+    if (!text) return decoded;
+
+    // 1. hex2bin( 'hex...' )
+    const hexRe = /hex2bin\s*\(\s*['"]([0-9a-fA-F]+)['"]\s*\)/g;
+    let m;
+    while ((m = hexRe.exec(text)) !== null) {
+        try {
+            const hex = m[1];
+            let out = '';
+            for (let i = 0; i + 1 < hex.length; i += 2) {
+                out += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
+            }
+            if (/[\x20-\x7e]/.test(out) && out.length >= 4) {
+                decoded.push({ type: 'hex2bin', raw: m[0], decoded: out });
+            }
+        } catch (e) {}
+    }
+
+    // 2. base64_decode( '...' )
+    // (chỉ nhận diện chuỗi base64 pure ASCII để giải nếu trình duyệt hỗ trợ atob)
+    const b64Re = /base64_decode\s*\(\s*['"]([A-Za-z0-9+/=]+)['"]\s*\)/g;
+    while ((m = b64Re.exec(text)) !== null) {
+        try {
+            if (typeof atob === 'function') {
+                const dec = atob(m[1]);
+                if (/[\x20-\x7e]/.test(dec)) {
+                    decoded.push({ type: 'base64_decode', raw: m[0], decoded: dec });
+                }
+            }
+        } catch (e) {}
+    }
+
+    // 3. str_rot13( '...' )
+    const rotRe = /str_rot13\s*\(\s*['"]([A-Za-z]+)['"]\s*\)/g;
+    while ((m = rotRe.exec(text)) !== null) {
+        const dec = m[1].replace(/[a-zA-Z]/g, c => {
+            const base = c <= 'Z' ? 65 : 97;
+            return String.fromCharCode(((c.charCodeAt(0) - base + 13) % 26) + base);
+        });
+        decoded.push({ type: 'str_rot13', raw: m[0], decoded: dec });
+    }
+
+    return decoded;
+}
+
 // Phiên bản đồng bộ (dùng hash SHA-256 đã tính trước nếu có) gọi trong vòng lặp forEach
 function analyzeMalwareSync(text, fileName, fileSize, precomputedSha256) {
     if (!text || text.length === 0) {
-        return { family: "Không đọc được nội dung", type: "unknown", entropy: 0, entropy_verdict: "—", hashes: { md5: '', sha1: '', sha256: '' }, iocs: { ips: [], urls: [], domains: [] }, pe_info: {}, evidence: [], file_size: fileSize || 0 };
+        return { family: "Không đọc được nội dung", type: "unknown", entropy: 0, entropy_verdict: "—", hashes: { md5: '', sha1: '', sha256: '' }, iocs: { ips: [], urls: [], domains: [] }, pe_info: {}, evidence: [], decoded_payloads: [], file_size: fileSize || 0 };
     }
     const entropy = shannonEntropy(text);
     const type = detectFileType(fileName, text);
     const iocs = extractIocs(text);
     const family = classifyMalwareFamily(fileName, text, type);
     const evidence = detectMalwareEvidence(text, fileName, type);
+    const decoded_payloads = decodePayload(text);
     return {
         family,
         type,
@@ -986,6 +1035,7 @@ function analyzeMalwareSync(text, fileName, fileSize, precomputedSha256) {
         iocs,
         pe_info: {},
         evidence,
+        decoded_payloads,
         file_size: fileSize || text.length
     };
 }
@@ -1557,6 +1607,23 @@ function populateMalwareTab() {
                         <div style="display:flex; align-items:flex-start; gap:8px; padding:6px 10px; background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.15); border-radius:5px; font-size:0.72rem;">
                             <code style="color:#F87171; font-family:var(--font-mono); font-weight:700; white-space:nowrap;">${ev.label}</code>
                             <span style="color:var(--text-secondary); line-height:1.4;">${ev.why}</span>
+                        </div>`).join('')}
+                    </div>
+                </div>` : ''}
+
+                ${ma.decoded_payloads && ma.decoded_payloads.length ? `
+                <div style="margin-top:12px;">
+                    <div style="font-weight:600; color:#60A5FA; font-size:0.78rem; margin-bottom:6px;">🔓 Giải mã Payload ẩn (nội dung thật bị giấu)</div>
+                    <div style="display:flex; flex-direction:column; gap:6px;">
+                        ${ma.decoded_payloads.map(dp => `
+                        <div style="padding:8px 10px; background:rgba(96,165,250,0.06); border:1px solid rgba(96,165,250,0.18); border-radius:5px; font-size:0.72rem;">
+                            <div style="color:var(--text-muted); margin-bottom:4px;">
+                                <span style="font-weight:700; color:#60A5FA;">${dp.type}:</span>
+                                <code style="font-family:var(--font-mono); word-break:break-all; color:var(--text-muted);">${dp.raw}</code>
+                            </div>
+                            <div style="color:#10B981; font-weight:700; font-family:var(--font-mono); word-break:break-all;">
+                                → ${dp.decoded}
+                            </div>
                         </div>`).join('')}
                     </div>
                 </div>` : ''}

@@ -16,11 +16,13 @@ try:
 except ImportError:
     detect_malware = None
 
-# Chấm điểm CVSS 3.1 + phân loại + CWE cho mã độc
+# Chấm điểm CVSS 3.1 + phân loại + CWE + MITRE + entropy + risk rating cho mã độc
 try:
-    from cvss_scoring import classify_finding, get_profile, compute_cvss_from_vector, severity_from_score
+    from cvss_scoring import (classify_finding, get_profile, compute_cvss_from_vector,
+                              severity_from_score, shannon_entropy, entropy_flag, owasp_risk_rating)
 except ImportError:
     classify_finding = get_profile = compute_cvss_from_vector = severity_from_score = None
+    shannon_entropy = entropy_flag = owasp_risk_rating = None
 
 # Try importing parsing and data libraries, with fallback
 try:
@@ -385,7 +387,7 @@ class PIIAnalyzer:
                                 "line": line_num,
                                 "context": cleaned_line[:100] + ("..." if len(cleaned_line) > 100 else "")
                             }
-                            # Gắn thêm CVSS + CWE + phân loại mã độc
+                            # Gắn thêm CVSS + CWE + MITRE + phân loại mã độc
                             if classify_finding is not None and get_profile is not None:
                                 prof_key = classify_finding(reason)
                                 profile = get_profile(prof_key)
@@ -398,6 +400,10 @@ class PIIAnalyzer:
                                     finding["cvss_score"] = profile["score"]
                                     finding["cvss_severity"] = profile["severity"]
                                     finding["reason"] = reason
+                                    mitre = profile.get("mitre", {})
+                                    finding["mitre_id"] = mitre.get("id", "")
+                                    finding["mitre_name"] = mitre.get("name", "")
+                                    finding["mitre_tactic"] = mitre.get("tactic", "")
                             findings.append(finding)
                     # Vẫn quét regex gốc làm dự phòng nếu module không nạp được
                     else:
@@ -545,10 +551,10 @@ class ReportGenerator:
             import csv
             with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
                 writer = csv.writer(f)
-                writer.writerow(["Đường dẫn tệp", "Định dạng", "Mức độ nhạy cảm", "Quyền hạn tệp", "Trạng thái bảo mật", "Loại rủi ro phát hiện", "Giá trị trùng khớp", "Dòng", "CWE", "Điểm CVSS", "Mức CVSS", "Đề xuất khắc phục"])
+                writer.writerow(["Đường dẫn tệp", "Định dạng", "Mức độ nhạy cảm", "Quyền hạn tệp", "Trạng thái bảo mật", "Loại rủi ro phát hiện", "Giá trị trùng khớp", "Dòng", "CWE", "MITRE ATT&CK", "Điểm CVSS", "Mức CVSS", "Đề xuất khắc phục"])
                 for r in self.results:
                     if not r["findings"]:
-                        writer.writerow([r["file_path"], r["format"], "An toàn", r["permissions"], "Tuân thủ", "Không có", "N/A", "N/A", "N/A", "N/A", "N/A", "Không cần hành động."])
+                        writer.writerow([r["file_path"], r["format"], "An toàn", r["permissions"], "Tuân thủ", "Không có", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "Không cần hành động."])
                     for f in r["findings"]:
                         writer.writerow([
                             r["file_path"],
@@ -560,6 +566,7 @@ class ReportGenerator:
                             f["value"],
                             f["line"],
                             f.get("cwe_id", "N/A"),
+                            f.get("mitre_id", "N/A"),
                             f.get("cvss_score", "N/A"),
                             f.get("cvss_severity", "N/A"),
                             r["compliance"]["remediation"]
@@ -581,6 +588,7 @@ class ReportGenerator:
                     "Giá trị trùng khớp": "N/A",
                     "Dòng": "N/A",
                     "CWE": "N/A",
+                    "MITRE ATT&CK": "N/A",
                     "Điểm CVSS": "N/A",
                     "Mức CVSS": "N/A",
                     "Đề xuất khắc phục": "Không cần hành động."
@@ -596,6 +604,7 @@ class ReportGenerator:
                     "Giá trị trùng khớp": f["value"],
                     "Dòng": f["line"],
                     "CWE": f.get("cwe_id", "N/A"),
+                    "MITRE ATT&CK": f.get("mitre_id", "N/A"),
                     "Điểm CVSS": f.get("cvss_score", "N/A"),
                     "Mức CVSS": f.get("cvss_severity", "N/A"),
                     "Đề xuất khắc phục": r["compliance"]["remediation"]
@@ -1273,6 +1282,18 @@ class PIIScanAPIHandler(BaseHTTPRequestHandler):
                 except ValueError:
                     rel_path = str(file_path)
                 
+                # Tính entropy Shannon của file (phát hiện payload mã hóa)
+                file_entropy = 0.0
+                file_entropy_risk = "none"
+                try:
+                    if shannon_entropy is not None:
+                        with open(file_path, "rb") as _fb:
+                            file_entropy = shannon_entropy(_fb.read(65536))  # đọc tối đa 64KB đầu
+                        if entropy_flag is not None:
+                            file_entropy_risk = entropy_flag(file_entropy)["risk"]
+                except Exception:
+                    pass
+                
                 # Deduplicate and group findings by PII type
                 grouped_pii = {}
                 file_cvss_score = 0.0
@@ -1293,6 +1314,9 @@ class PIIScanAPIHandler(BaseHTTPRequestHandler):
                         "cvss_score": f.get("cvss_score"),
                         "cvss_severity": f.get("cvss_severity", ""),
                         "cvss_vector": f.get("cvss_vector", ""),
+                        "mitre_id": f.get("mitre_id", ""),
+                        "mitre_name": f.get("mitre_name", ""),
+                        "mitre_tactic": f.get("mitre_tactic", ""),
                     })
                     # Theo dõi CVSS cao nhất của file
                     if f.get("cvss_score") is not None:
@@ -1321,6 +1345,20 @@ class PIIScanAPIHandler(BaseHTTPRequestHandler):
                 else:
                     level_field = "safe"
 
+                # Tính OWASP Risk Rating cho file (nếu có mã độc)
+                file_risk = None
+                if file_cvss_severity and owasp_risk_rating is not None:
+                    try:
+                        is_in_public = any(pub in str(file_path.as_posix()) for pub in compliance.public_dirs)
+                        file_risk = owasp_risk_rating(
+                            file_cvss_severity,
+                            eval_result["is_unsecured"],
+                            is_in_public,
+                            file_entropy,
+                        )
+                    except Exception:
+                        file_risk = None
+
                 scan_results.append({
                     "fileName": file_path.name,
                     "path": str(file_path),
@@ -1336,6 +1374,9 @@ class PIIScanAPIHandler(BaseHTTPRequestHandler):
                         "severity": file_cvss_severity,
                         "vector": file_cvss_vector,
                     },
+                    "entropy": file_entropy,
+                    "entropyRisk": file_entropy_risk,
+                    "riskRating": file_risk,
                     "piiFound": pii_found_list
                 })
                 

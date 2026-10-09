@@ -12,9 +12,12 @@ https://longngoryo.github.io/SIIScan/
 - Phát hiện webshell/backdoor (PHP, Python, JS, ASP, JSP, Shell...) bằng module `webshell_detector.py` với khả năng giải mã obfuscation (base64, rot13, hex, gzip, XOR, nối chuỗi)
 - **Chấm điểm CVSS 3.1** (0.0–10.0) cho từng lỗ hổng mã độc theo chuẩn FIRST.org, kèm vector CVSS và mức độ (None/Low/Medium/High/Critical)
 - **Phân loại mã độc** chi tiết (webshell RCE, command execution, reverse shell, RFI, obfuscation, lỗ hổng upload...) + **ánh xạ mã CWE** (CWE-78, CWE-94, CWE-506, CWE-434...)
+- **Ánh xạ MITRE ATT&CK** (T1059, T1505.003, T1027, T1071, T1190, T1552...) kèm chiến thuật (tactic)
+- **Phân tích entropy Shannon** phát hiện payload mã hóa/nén bị che giấu
+- **Đánh giá rủi ro OWASP Risk Rating** (Likelihood × Impact) kết hợp CVSS + quyền truy cập + vị trí thư mục
 - Phát hiện dữ liệu cá nhân theo Nghị định 13 (CCCD, thẻ tín dụng, tài khoản ngân hàng, email, sức khỏe, sinh trắc...)
 - Đánh giá tuân thủ + đề xuất khắc phục tự động (CHMOD 600, mã hóa AES-256, cách ly mã độc)
-- Báo cáo HTML/CSV trực quan (kèm cột CVSS, CWE)
+- Dashboard phân bố CVSS + báo cáo HTML/CSV/PDF (kèm cột CVSS, CWE, MITRE)
 
 ## Chạy nhanh
 
@@ -40,6 +43,7 @@ Kết quả: recall 100% (23/23 webshell), 0 false positive mã độc.
 ```
 piiscan.py              # Code chính
 webshell_detector.py    # Module phát hiện webshell nâng cao
+cvss_scoring.py         # Chấm CVSS 3.1 + CWE + MITRE + entropy + risk rating
 index.html / app.js / style.css  # Giao diện web
 test_dataset/           # Bộ mẫu kiểm thử
 ```

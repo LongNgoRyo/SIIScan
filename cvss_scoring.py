@@ -50,6 +50,7 @@ MALWARE_PROFILES = {
         "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
         "score": 9.8,
         "severity": "Critical",
+        "mitre": {"id": "T1505.003", "name": "Server Software Component: Web Shell", "tactic": "Persistence"},
     },
     "command_execution": {
         "name": "Lệnh thực thi hệ thống (Command Execution)",
@@ -59,6 +60,7 @@ MALWARE_PROFILES = {
         "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
         "score": 9.8,
         "severity": "Critical",
+        "mitre": {"id": "T1059", "name": "Command and Scripting Interpreter", "tactic": "Execution"},
     },
     "code_eval": {
         "name": "Thực thi mã động (eval/assert)",
@@ -68,6 +70,7 @@ MALWARE_PROFILES = {
         "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
         "score": 9.8,
         "severity": "Critical",
+        "mitre": {"id": "T1059", "name": "Command and Scripting Interpreter", "tactic": "Execution"},
     },
     "obfuscation": {
         "name": "Mã độc che giấu / Obfuscation",
@@ -77,6 +80,7 @@ MALWARE_PROFILES = {
         "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
         "score": 9.8,
         "severity": "Critical",
+        "mitre": {"id": "T1027", "name": "Obfuscated Files or Information", "tactic": "Defense Evasion"},
     },
     "reverse_shell": {
         "name": "Reverse Shell (Kết nối ngược)",
@@ -86,6 +90,7 @@ MALWARE_PROFILES = {
         "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
         "score": 10.0,
         "severity": "Critical",
+        "mitre": {"id": "T1071", "name": "Application Layer Protocol", "tactic": "Command and Control"},
     },
     "remote_file_inclusion": {
         "name": "Remote File Inclusion (RFI)",
@@ -95,6 +100,7 @@ MALWARE_PROFILES = {
         "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
         "score": 9.8,
         "severity": "Critical",
+        "mitre": {"id": "T1190", "name": "Exploit Public-Facing Application", "tactic": "Initial Access"},
     },
     "file_upload": {
         "name": "Lỗ hổng tải tệp tin không kiểm soát",
@@ -104,6 +110,7 @@ MALWARE_PROFILES = {
         "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H",
         "score": 8.7,
         "severity": "High",
+        "mitre": {"id": "T1190", "name": "Exploit Public-Facing Application", "tactic": "Initial Access"},
     },
     "credential_exposure": {
         "name": "Rò rỉ thông tin xác thực / Khóa bí mật",
@@ -113,6 +120,7 @@ MALWARE_PROFILES = {
         "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
         "score": 7.5,
         "severity": "High",
+        "mitre": {"id": "T1552", "name": "Unsecured Credentials", "tactic": "Credential Access"},
     },
     "sql_dump_exposure": {
         "name": "Rò rỉ cơ sở dữ liệu / bản sao lưu SQL",
@@ -122,6 +130,7 @@ MALWARE_PROFILES = {
         "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
         "score": 7.5,
         "severity": "High",
+        "mitre": {"id": "T1213", "name": "Data from Information Repositories", "tactic": "Collection"},
     },
 }
 
@@ -211,3 +220,93 @@ def classify_finding(reason):
         return 'command_execution'
     # mặc định
     return 'webshell_rce'
+
+
+# ==========================================================
+# ENTROPY ANALYSIS (Shannon entropy) — phát hiện payload mã hóa
+# ==========================================================
+import collections
+
+def shannon_entropy(data: bytes) -> float:
+    """
+    Tính entropy Shannon (0.0 - 8.0) của dữ liệu.
+    Entropy cao > 6.5 thường là dấu hiệu dữ liệu mã hóa / nén / base64
+    (payload độc hại bị che giấu), trong khi mã nguồn thường ở mức 4.0 - 6.0.
+    """
+    if not data:
+        return 0.0
+    freq = collections.Counter(data)
+    total = len(data)
+    entropy = 0.0
+    for count in freq.values():
+        p = count / total
+        entropy -= p * math.log2(p)
+    return round(entropy, 3)
+
+
+def entropy_flag(entropy: float) -> dict:
+    """
+    Đánh giá mức độ nghi ngờ dựa trên entropy.
+    Trả về dict {entropy, risk, flag}.
+    """
+    if entropy >= 7.0:
+        return {"entropy": entropy, "risk": "high", "flag": "Rất cao — nghi ngờ payload mã hóa/nén hoàn toàn"}
+    if entropy >= 6.5:
+        return {"entropy": entropy, "risk": "medium", "flag": "Cao — có thể chứa dữ liệu mã hóa hoặc base64 dày đặc"}
+    if entropy >= 5.5:
+        return {"entropy": entropy, "risk": "low", "flag": "Trung bình — hỗn hợp mã nguồn và dữ liệu"}
+    return {"entropy": entropy, "risk": "none", "flag": "Thấp — văn bản/mã nguồn thông thường"}
+
+
+# ==========================================================
+# OWASP RISK RATING (Likelihood x Impact)
+# ==========================================================
+def owasp_risk_rating(cvss_severity, is_unsecured, in_public_dir, entropy=None):
+    """
+    Tính điểm rủi ro tổng hợp theo phương pháp OWASP Risk Rating.
+    Likelihood (0-9) x Impact (0-9) -> mức rủi ro 0-25.
+
+    Likelihood dựa trên: khả năng tiếp cận (public dir, quyền CHMOD),
+    và kỹ năng cần thiết (obfuscation -> kẻ tấn công tinh vi -> thấp hơn).
+    Impact dựa trên CVSS severity (ảnh hưởng bảo mật).
+    """
+    # --- Impact (0-9) từ CVSS severity ---
+    impact_map = {"Critical": 9, "High": 7, "Medium": 5, "Low": 3, "None": 1}
+    impact = impact_map.get(cvss_severity, 3)
+
+    # --- Likelihood (0-9) ---
+    likelihood = 0
+    # Dễ bị khai thác nhất khi ở thư mục public + quyền world-accessible
+    if in_public_dir:
+        likelihood += 3
+    if is_unsecured:
+        likelihood += 3
+    # Entropy cao -> payload bị mã hóa -> kẻ tấn công tinh vi hơn nhưng vẫn khả thi
+    if entropy is not None and entropy >= 6.5:
+        likelihood += 2
+    elif entropy is not None and entropy >= 5.5:
+        likelihood += 1
+    # Đảm bảo tối thiểu có khả năng khai thác (vì đã phát hiện mã độc)
+    if likelihood == 0:
+        likelihood = 2
+    likelihood = min(likelihood, 9)
+
+    risk_score = likelihood * impact
+
+    if risk_score >= 24:
+        risk_level = "Rất cao (Critical)"
+    elif risk_score >= 16:
+        risk_level = "Cao (High)"
+    elif risk_score >= 9:
+        risk_level = "Trung bình (Medium)"
+    elif risk_score >= 4:
+        risk_level = "Thấp (Low)"
+    else:
+        risk_level = "Rất thấp (Informational)"
+
+    return {
+        "likelihood": likelihood,
+        "impact": impact,
+        "score": risk_score,
+        "level": risk_level,
+    }

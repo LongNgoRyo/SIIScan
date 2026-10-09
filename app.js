@@ -65,6 +65,13 @@ function cvssBadge(score, severity, vector) {
     </span>`;
 }
 
+// Render badge MITRE ATT&CK
+function mitreBadge(mitreId, mitreTactic) {
+    if (!mitreId) return '';
+    const title = mitreTactic ? `Tactic: ${mitreTactic}` : '';
+    return `<span class="mitre-badge" title="${title}" style="display:inline-flex; align-items:center; gap:4px; background:rgba(139,92,246,0.15); color:#A78BFA; border:1px solid rgba(139,92,246,0.4); padding:2px 8px; border-radius:99px; font-size:0.7rem; font-weight:700; font-family:var(--font-mono);">⚔️ ${mitreId}</span>`;
+}
+
 // Hàm ẩn dữ liệu nhạy cảm để hiển thị an toàn
 function maskPIIValue(type, value) {
     if (!value) return "";
@@ -1091,6 +1098,32 @@ function populateDetailTab() {
         extRowsHtml = '<div class="detail-row" style="text-align:center; color:var(--text-muted); padding: 12px;">Không có thông tin</div>';
     }
 
+    // Tính phân bố CVSS (cho dashboard)
+    const cvssDist = { Critical: 0, High: 0, Medium: 0, Low: 0 };
+    let totalCvssRated = 0;
+    scanResults.forEach(res => {
+        if (res.cvss && res.cvss.severity) {
+            const sev = res.cvss.severity;
+            if (cvssDist[sev] !== undefined) { cvssDist[sev]++; totalCvssRated++; }
+        }
+    });
+    const cvssColors = { Critical: '#EF4444', High: '#F97316', Medium: '#F59E0B', Low: '#10B981' };
+    let cvssBarsHtml = '';
+    for (const [sev, cnt] of Object.entries(cvssDist)) {
+        if (cnt === 0) continue;
+        const pct = totalCvssRated > 0 ? Math.round((cnt / totalCvssRated) * 100) : 0;
+        cvssBarsHtml += `
+            <div class="detail-row" style="display:flex; flex-direction:column; gap:6px; padding:10px 0; border-bottom:1px solid var(--border-color);">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-weight:600; color:${cvssColors[sev]}; display:flex; align-items:center; gap:8px;"><span style="width:10px; height:10px; border-radius:50%; background:${cvssColors[sev]}; display:inline-block;"></span>${sev}</span>
+                    <span style="font-family:var(--font-mono); color:var(--text-secondary);">${cnt} tệp (${pct}%)</span>
+                </div>
+                <div style="height:6px; background:rgba(255,255,255,0.06); border-radius:99px; overflow:hidden;">
+                    <div style="height:100%; width:${pct}%; background:${cvssColors[sev]}; border-radius:99px;"></div>
+                </div>
+            </div>`;
+    }
+
     // Đưa nội dung vào Tab
     content.innerHTML = `
         <div class="detail-card">
@@ -1098,6 +1131,13 @@ function populateDetailTab() {
             <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">Số lượt xuất hiện của các dữ liệu cá nhân cơ bản và nhạy cảm (theo quy định tại Nghị định 13/2023/NĐ-CP) được phát hiện trên máy chủ này.</p>
             <div class="detail-table">
                 ${piiRowsHtml}
+            </div>
+        </div>
+        <div class="detail-card" style="margin-top: 24px;">
+            <h4>🛡️ Phân bố Mức độ Nghiêm trọng Lỗ hổng (CVSS v3.1)</h4>
+            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">Phân loại tệp tin theo điểm CVSS 3.1: Critical (9.0–10.0), High (7.0–8.9), Medium (4.0–6.9), Low (0.1–3.9). Điểm được tính theo chuẩn FIRST.org.</p>
+            <div class="detail-table">
+                ${cvssBarsHtml || '<div style="color: var(--text-muted); font-size: 0.85rem; text-align: center; padding: 10px;">Không có lỗ hổng mã độc được đánh giá CVSS.</div>'}
             </div>
         </div>
         <div class="detail-card" style="margin-top: 24px;">
@@ -1330,6 +1370,18 @@ function renderDetailedGrid(results) {
                         <span>Dung lượng: ${res.size}</span>
                     </div>
                     ${res.cvss && res.cvss.score ? `<div style="margin-top:8px;">${cvssBadge(res.cvss.score, res.cvss.severity, res.cvss.vector)}</div>` : ''}
+                    ${(() => {
+                        // Gom các MITRE id duy nhất từ details
+                        const mitreIds = [];
+                        res.piiFound.forEach(p => (p.details || []).forEach(d => {
+                            if (d.mitre_id && !mitreIds.some(m => m.id === d.mitre_id)) {
+                                mitreIds.push({ id: d.mitre_id, tactic: d.mitre_tactic });
+                            }
+                        }));
+                        return mitreIds.map(m => mitreBadge(m.id, m.tactic)).join(' ');
+                    })()}
+                    ${res.entropy !== undefined && res.entropy > 0 ? `<span style="display:inline-flex; align-items:center; gap:4px; font-size:0.7rem; color:var(--text-muted); font-family:var(--font-mono); margin-left:6px;" title="Entropy Shannon">Entropy: ${res.entropy}</span>` : ''}
+                    ${res.riskRating ? `<span style="font-size:0.7rem; color:${res.riskRating.level.includes('Cao') ? '#F59E0B' : '#9CA3AF'}; margin-left:6px;" title="OWASP Risk = Likelihood × Impact">Risk: ${res.riskRating.level}</span>` : ''}
                 </div>
                 <div style="display: flex; align-items: center; gap: 12px;">
                     <div class="pii-file-status">
@@ -1353,6 +1405,7 @@ function renderDetailedGrid(results) {
                             </td>
                             <td style="padding: 8px 6px; font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-primary);">${maskPIIValue(p.name, det.value)}</td>
                             <td style="padding: 8px 6px; font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-secondary);">${det.cwe_id || '—'}</td>
+                            <td style="padding: 8px 6px;">${det.mitre_id ? mitreBadge(det.mitre_id, det.mitre_tactic) : '—'}</td>
                             <td style="padding: 8px 6px;">${det.cvss_score ? cvssBadge(det.cvss_score, det.cvss_severity, det.cvss_vector) : '—'}</td>
                             <td style="padding: 8px 6px; font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 350px;" title="${det.text.replace(/"/g, '&quot;')}">${det.text}</td>
                         </tr>
@@ -1376,6 +1429,7 @@ function renderDetailedGrid(results) {
                                     <th style="padding: 6px; font-weight: 600; width: 120px;">Loại dữ liệu</th>
                                     <th style="padding: 6px; font-weight: 600; width: 180px;">Giá trị phát hiện</th>
                                     <th style="padding: 6px; font-weight: 600; width: 70px;">CWE</th>
+                                    <th style="padding: 6px; font-weight: 600; width: 90px;">MITRE</th>
                                     <th style="padding: 6px; font-weight: 600; width: 130px;">CVSS</th>
                                     <th style="padding: 6px; font-weight: 600;">Ngữ cảnh phát hiện</th>
                                 </tr>
@@ -1844,6 +1898,7 @@ function exportReport() {
                 <td style="padding: 10px 8px; font-size: 0.8rem; font-weight: 500; word-break: break-all;">${res.path}</td>
                 <td style="padding: 10px 8px; font-size: 0.8rem; font-family: monospace;">${res.permissions}</td>
                 <td style="padding: 10px 8px; font-size: 0.8rem; color: ${res.piiFound.length > 0 ? '#EF4444' : '#10B981'}; font-weight: 600;">${piiListText}</td>
+                <td style="padding: 10px 8px; font-size: 0.8rem; font-family: monospace; font-weight: 700; color: ${res.cvss && res.cvss.score ? '#EF4444' : '#9CA3AF'};">${res.cvss && res.cvss.score ? `${res.cvss.score} (${res.cvss.severity})` : '—'}</td>
                 <td style="padding: 10px 8px; font-size: 0.8rem; color: ${statusColor}; font-weight: bold;">${statusText}</td>
             </tr>
         `;
@@ -1852,7 +1907,7 @@ function exportReport() {
     if (fileRowsHtml === '') {
         fileRowsHtml = `
             <tr>
-                <td colspan="4" style="padding: 20px; text-align: center; color: #6B7280; font-style: italic;">Hệ thống hoàn toàn sạch. Không phát hiện tệp tin vi phạm.</td>
+                <td colspan="5" style="padding: 20px; text-align: center; color: #6B7280; font-style: italic;">Hệ thống hoàn toàn sạch. Không phát hiện tệp tin vi phạm.</td>
             </tr>
         `;
     }
@@ -2085,10 +2140,11 @@ function exportReport() {
                 <table class="pdf-table" style="margin-top: 5px; margin-bottom: 5px;">
                     <thead>
                         <tr>
-                            <th style="width: 35%; font-size: 0.8rem;">Đường dẫn tệp</th>
-                            <th style="width: 18%; font-size: 0.8rem;">Quyền hạn</th>
-                            <th style="width: 27%; font-size: 0.8rem;">Dữ liệu phát hiện</th>
-                            <th style="width: 20%; font-size: 0.8rem;">Trạng thái</th>
+                            <th style="width: 30%; font-size: 0.8rem;">Đường dẫn tệp</th>
+                            <th style="width: 15%; font-size: 0.8rem;">Quyền hạn</th>
+                            <th style="width: 25%; font-size: 0.8rem;">Dữ liệu phát hiện</th>
+                            <th style="width: 12%; font-size: 0.8rem;">CVSS</th>
+                            <th style="width: 18%; font-size: 0.8rem;">Trạng thái</th>
                         </tr>
                     </thead>
                     <tbody>

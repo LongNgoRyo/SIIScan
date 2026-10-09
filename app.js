@@ -881,7 +881,7 @@ function analyzeMalwareSync(text, fileName, fileSize) {
         type,
         entropy: entropy.toFixed(4),
         entropy_verdict: entropy >= 7.0 ? 'Entropy cao — nghi ngờ packed/encrypted' : entropy >= 6.0 ? 'Entropy trung bình — có thể obfuscated' : 'Entropy bình thường',
-        hashes: {},
+        hashes: { md5: '', sha1: '', sha256: '' },
         fuzzy_hash: '',
         iocs,
         pe_info: {},
@@ -1837,8 +1837,8 @@ function renderDetailedGrid(results) {
                     <div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
                         <span class="malware-family-badge" style="display:inline-flex; align-items:center; gap:5px; background:rgba(239,68,68,0.13); color:#F87171; border:1px solid rgba(239,68,68,0.35); padding:3px 10px; border-radius:4px; font-size:0.72rem; font-weight:700;">🦠 ${res.malwareAnalysis.family}</span>
                         <span style="font-size:0.68rem; color:var(--text-muted); font-family:var(--font-mono);">${res.malwareAnalysis.type}</span>
-                        <span style="font-size:0.68rem; color:var(--text-muted); font-family:var(--font-mono);" title="MD5">MD5: ${res.malwareAnalysis.hashes ? res.malwareAnalysis.hashes.md5.slice(0,12) : '—'}</span>
-                        <span style="font-size:0.68rem; color:var(--text-muted); font-family:var(--font-mono);" title="SHA256">SHA256: ${res.malwareAnalysis.hashes ? res.malwareAnalysis.hashes.sha256.slice(0,16) : '—'}</span>
+                        <span style="font-size:0.68rem; color:var(--text-muted); font-family:var(--font-mono);" title="MD5">MD5: ${res.malwareAnalysis.hashes && res.malwareAnalysis.hashes.md5 ? res.malwareAnalysis.hashes.md5.slice(0,12) : '—'}</span>
+                        <span style="font-size:0.68rem; color:var(--text-muted); font-family:var(--font-mono);" title="SHA256">SHA256: ${res.malwareAnalysis.hashes && res.malwareAnalysis.hashes.sha256 ? res.malwareAnalysis.hashes.sha256.slice(0,16) : '—'}</span>
                         ${res.malwareAnalysis.iocs && (res.malwareAnalysis.iocs.ips.length || res.malwareAnalysis.iocs.urls.length || res.malwareAnalysis.iocs.domains.length) ? `<span style="font-size:0.68rem; color:#F59E0B; font-weight:600;">IoC: ${res.malwareAnalysis.iocs.ips.length + res.malwareAnalysis.iocs.urls.length + res.malwareAnalysis.iocs.domains.length}</span>` : ''}
                         ${res.malwareAnalysis.pe_info && Object.keys(res.malwareAnalysis.pe_info).length ? `<span style="font-size:0.68rem; color:#60A5FA; font-family:var(--font-mono);">${res.malwareAnalysis.pe_info.machine || ''} ${res.malwareAnalysis.pe_info.packer_signs && res.malwareAnalysis.pe_info.packer_signs.length ? '⚠️' : ''}</span>` : ''}
                     </div>` : ''}
@@ -1867,7 +1867,7 @@ function renderDetailedGrid(results) {
                             <td style="padding: 8px 6px; font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-secondary);">${det.cwe_id || '—'}</td>
                             <td style="padding: 8px 6px;">${det.mitre_id ? mitreBadge(det.mitre_id, det.mitre_tactic) : '—'}</td>
                             <td style="padding: 8px 6px;">${det.cvss_score ? cvssBadge(det.cvss_score, det.cvss_severity, det.cvss_vector) : '—'}</td>
-                            <td style="padding: 8px 6px; font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 350px;" title="${det.text.replace(/"/g, '&quot;')}">${det.text}</td>
+                            <td style="padding: 8px 6px; font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 350px;" title="${(det.text || det.value || '').replace(/"/g, '&quot;')}">${det.text || det.value || ''}</td>
                         </tr>
                     `;
                 });

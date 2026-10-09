@@ -2106,6 +2106,13 @@ function exportReport() {
         });
     });
 
+    // ===== Phân loại mã độc / DLCN (dùng cho bảng tuân thủ pháp lý trong PDF) =====
+    const CLS_MAL = "Mã độc & Lệnh nguy hiểm (Webshell/Backdoor)";
+    const pdfMalwareFiles = scanResults.filter(r => r.piiFound.some(p => p.name === CLS_MAL));
+    const pdfPiiFiles = scanResults.filter(r => r.piiFound.some(p => p.name !== CLS_MAL));
+    const pdfHasMalware = pdfMalwareFiles.length > 0;
+    const pdfHasPii = pdfPiiFiles.length > 0;
+
     // Thiết lập nội dung HTML cho báo cáo in
     reportContainer.innerHTML = `
         <style>
@@ -2260,35 +2267,51 @@ function exportReport() {
 
             <h3 style="color: #1E3A8A; font-size: 1.25rem; margin-top: 20px; margin-bottom: 12px; border-left: 4px solid #3B82F6; padding-left: 10px;">II. Đánh giá Tính Tuân thủ Pháp luật & Tiêu chuẩn</h3>
             
-            <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 10px;">
+            <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;">
                 <div style="border: 1px solid #E5E7EB; border-radius: 8px; padding: 12px;">
                     <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
-                        <strong style="font-size: 0.9rem; color: #1E3A8A;">1. Nghị định 13/2023/NĐ-CP (Bảo vệ dữ liệu cá nhân)</strong>
-                        <span class="badge-pdf ${ (isRemediated || (scanStats.filesWithPii === 0)) ? 'pass' : 'fail' }">${ (isRemediated || (scanStats.filesWithPii === 0)) ? 'ĐẠT' : 'CHƯA ĐẠT' }</span>
+                        <strong style="font-size: 0.88rem; color: #1E3A8A;">1. Luật An ninh mạng (Điều 8 & 19) — Phòng chống Mã độc</strong>
+                        <span class="badge-pdf ${ (isRemediated || !pdfHasMalware) ? 'pass' : 'fail' }">${ (isRemediated || !pdfHasMalware) ? 'ĐẠT' : 'CHƯA ĐẠT' }</span>
                     </div>
-                    <p style="margin: 0; font-size: 0.8rem; color: #4B5563; line-height: 1.45;">Yêu cầu mã hóa thông tin nhạy cảm (CCCD, tài khoản ngân hàng, sinh trắc học, sức khỏe) khi lưu trữ và kiểm soát quyền truy cập chặt chẽ. Việc lưu plaintext vi phạm Điều 36.</p>
+                    <p style="margin: 0; font-size: 0.78rem; color: #4B5563; line-height: 1.45;">Nghiêm cấm phát tán mã độc, cài backdoor, chiếm quyền điều khiển hệ thống. ${pdfHasMalware ? `Phát hiện ${pdfMalwareFiles.length} tệp mã độc / webshell cần cách ly ngay.` : 'Không phát hiện mã độc trên máy chủ.'}</p>
                 </div>
 
                 <div style="border: 1px solid #E5E7EB; border-radius: 8px; padding: 12px;">
                     <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
-                        <strong style="font-size: 0.9rem; color: #1E3A8A;">2. Tiêu chuẩn ngành thẻ thanh toán PCI-DSS (Yêu cầu 3)</strong>
-                        <span class="badge-pdf ${ (isRemediated || (scanResults.filter(r => r.level === 'high' && r.securityStatus === 'unsecured').length === 0)) ? 'pass' : 'fail' }">${ (isRemediated || (scanResults.filter(r => r.level === 'high' && r.securityStatus === 'unsecured').length === 0)) ? 'ĐẠT' : 'CHƯA ĐẠT' }</span>
+                        <strong style="font-size: 0.88rem; color: #1E3A8A;">2. Nghị định 13/2023/NĐ-CP (Bảo vệ dữ liệu cá nhân)</strong>
+                        <span class="badge-pdf ${ (isRemediated || (!pdfHasPii && !pdfHasMalware)) ? 'pass' : 'fail' }">${ (isRemediated || (!pdfHasPii && !pdfHasMalware)) ? 'ĐẠT' : 'CHƯA ĐẠT' }</span>
                     </div>
-                    <p style="margin: 0; font-size: 0.8rem; color: #4B5563; line-height: 1.45;">Yêu cầu bảo vệ dữ liệu chủ thẻ lưu trữ. Cấm lưu plaintext số thẻ tín dụng hoặc thông tin giao dịch tài chính nhạy cảm.</p>
+                    <p style="margin: 0; font-size: 0.78rem; color: #4B5563; line-height: 1.45;">Yêu cầu mã hóa thông tin nhạy cảm (CCCD, tài khoản ngân hàng, sinh trắc học, sức khỏe) khi lưu trữ và kiểm soát quyền truy cập chặt chẽ. Lưu plaintext vi phạm Điều 36.</p>
                 </div>
 
                 <div style="border: 1px solid #E5E7EB; border-radius: 8px; padding: 12px;">
                     <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
-                        <strong style="font-size: 0.9rem; color: #1E3A8A;">3. Tiêu chuẩn ISO/IEC 27001 (Kiểm soát truy cập & Phân quyền)</strong>
-                        <span class="badge-pdf ${ (isRemediated || (scanResults.filter(r => r.permissions.includes("777")).length === 0)) ? 'pass' : 'fail' }">${ (isRemediated || (scanResults.filter(r => r.permissions.includes("777")).length === 0)) ? 'ĐẠT' : 'CHƯA ĐẠT' }</span>
+                        <strong style="font-size: 0.88rem; color: #1E3A8A;">3. Tiêu chuẩn PCI-DSS (Yêu cầu 3)</strong>
+                        <span class="badge-pdf ${ (isRemediated || (scanResults.filter(r => r.level === 'high' && r.securityStatus === 'unsecured' && !r.piiFound.some(p => p.name === CLS_MAL)).length === 0)) ? 'pass' : 'fail' }">${ (isRemediated || (scanResults.filter(r => r.level === 'high' && r.securityStatus === 'unsecured' && !r.piiFound.some(p => p.name === CLS_MAL)).length === 0)) ? 'ĐẠT' : 'CHƯA ĐẠT' }</span>
                     </div>
-                    <p style="margin: 0; font-size: 0.8rem; color: #4B5563; line-height: 1.45;">Đảm bảo các tệp chứa dữ liệu quan trọng hoặc tệp cấu hình được phân quyền truy cập giới hạn, tránh quyền đọc/ghi công khai (CHMOD 777 hoặc 755).</p>
+                    <p style="margin: 0; font-size: 0.78rem; color: #4B5563; line-height: 1.45;">Yêu cầu bảo vệ dữ liệu chủ thẻ lưu trữ. Cấm lưu plaintext số thẻ tín dụng hoặc thông tin giao dịch tài chính nhạy cảm.</p>
+                </div>
+
+                <div style="border: 1px solid #E5E7EB; border-radius: 8px; padding: 12px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
+                        <strong style="font-size: 0.88rem; color: #1E3A8A;">4. Tiêu chuẩn ISO/IEC 27001 (Kiểm soát truy cập & Phân quyền)</strong>
+                        <span class="badge-pdf ${ (isRemediated || (scanResults.filter(r => r.permissions && r.permissions.includes("777")).length === 0)) ? 'pass' : 'fail' }">${ (isRemediated || (scanResults.filter(r => r.permissions && r.permissions.includes("777")).length === 0)) ? 'ĐẠT' : 'CHƯA ĐẠT' }</span>
+                    </div>
+                    <p style="margin: 0; font-size: 0.78rem; color: #4B5563; line-height: 1.45;">Đảm bảo các tệp chứa dữ liệu quan trọng hoặc tệp cấu hình được phân quyền truy cập giới hạn, tránh quyền đọc/ghi công khai (CHMOD 777 hoặc 755).</p>
+                </div>
+
+                <div style="border: 1px solid #E5E7EB; border-radius: 8px; padding: 12px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
+                        <strong style="font-size: 0.88rem; color: #1E3A8A;">5. OWASP Top 10 (A03:2021 Injection)</strong>
+                        <span class="badge-pdf ${ (isRemediated || !pdfHasMalware) ? 'pass' : 'fail' }">${ (isRemediated || !pdfHasMalware) ? 'ĐẠT' : 'CHƯA ĐẠT' }</span>
+                    </div>
+                    <p style="margin: 0; font-size: 0.78rem; color: #4B5563; line-height: 1.45;">Ngăn chặn tiêm mã (Code/Command Injection) — nguyên nhân dẫn đến webshell và RCE. ${pdfHasMalware ? 'Phát hiện mã độc thực thi lệnh hệ thống vi phạm tiêu chuẩn.' : 'Không phát hiện điểm tiêm mã.'}</p>
                 </div>
             </div>
 
             <div class="pdf-footer">
                 <span>PIIScan Server Pro v2.5</span>
-                <span>Trang 2 / 4</span>
+                <span>Trang 2</span>
             </div>
         </div>
 
@@ -2312,7 +2335,7 @@ function exportReport() {
 
             <div class="pdf-footer">
                 <span>PIIScan Server Pro v2.5</span>
-                <span>Trang 3 / 4</span>
+                <span>Trang 3</span>
             </div>
         </div>
 
@@ -2369,7 +2392,7 @@ function exportReport() {
 
             <div class="pdf-footer">
                 <span>PIIScan Server Pro v2.5</span>
-                <span>Trang 4 / 4</span>
+                <span>Trang 4</span>
             </div>
         </div>
 
@@ -2393,7 +2416,7 @@ function exportReport() {
 
             <div class="pdf-footer">
                 <span>PIIScan Server Pro v2.5</span>
-                <span>Trang 5 / 5</span>
+                <span>Trang 5</span>
             </div>
         </div>
         ` : ''}

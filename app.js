@@ -1542,6 +1542,15 @@ function renderDetailedGrid(results) {
                     ${res.entropy !== undefined && res.entropy > 0 ? `<span style="display:inline-flex; align-items:center; gap:4px; font-size:0.7rem; color:var(--text-muted); font-family:var(--font-mono); margin-left:6px;" title="Entropy Shannon">Entropy: ${res.entropy}</span>` : ''}
                     ${res.riskRating ? `<span style="font-size:0.7rem; color:${res.riskRating.level.includes('Cao') ? '#F59E0B' : '#9CA3AF'}; margin-left:6px;" title="OWASP Risk = Likelihood × Impact">Risk: ${res.riskRating.level}</span>` : ''}
                     ${res.signatures && res.signatures.length > 0 ? `<div style="margin-top:6px; display:flex; flex-wrap:wrap; gap:6px;">${res.signatures.map(s => signatureBadge(s.rule_id, s.rule_name)).join('')}</div>` : ''}
+                    ${res.malwareAnalysis ? `
+                    <div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+                        <span class="malware-family-badge" style="display:inline-flex; align-items:center; gap:5px; background:rgba(239,68,68,0.13); color:#F87171; border:1px solid rgba(239,68,68,0.35); padding:3px 10px; border-radius:4px; font-size:0.72rem; font-weight:700;">🦠 ${res.malwareAnalysis.family}</span>
+                        <span style="font-size:0.68rem; color:var(--text-muted); font-family:var(--font-mono);">${res.malwareAnalysis.type}</span>
+                        <span style="font-size:0.68rem; color:var(--text-muted); font-family:var(--font-mono);" title="MD5">MD5: ${res.malwareAnalysis.hashes ? res.malwareAnalysis.hashes.md5.slice(0,12) : '—'}</span>
+                        <span style="font-size:0.68rem; color:var(--text-muted); font-family:var(--font-mono);" title="SHA256">SHA256: ${res.malwareAnalysis.hashes ? res.malwareAnalysis.hashes.sha256.slice(0,16) : '—'}</span>
+                        ${res.malwareAnalysis.iocs && (res.malwareAnalysis.iocs.ips.length || res.malwareAnalysis.iocs.urls.length || res.malwareAnalysis.iocs.domains.length) ? `<span style="font-size:0.68rem; color:#F59E0B; font-weight:600;">IoC: ${res.malwareAnalysis.iocs.ips.length + res.malwareAnalysis.iocs.urls.length + res.malwareAnalysis.iocs.domains.length}</span>` : ''}
+                        ${res.malwareAnalysis.pe_info && Object.keys(res.malwareAnalysis.pe_info).length ? `<span style="font-size:0.68rem; color:#60A5FA; font-family:var(--font-mono);">${res.malwareAnalysis.pe_info.machine || ''} ${res.malwareAnalysis.pe_info.packer_signs && res.malwareAnalysis.pe_info.packer_signs.length ? '⚠️' : ''}</span>` : ''}
+                    </div>` : ''}
                 </div>
                 <div style="display: flex; align-items: center; gap: 12px;">
                     <div class="pii-file-status">

@@ -30,6 +30,12 @@ try:
 except ImportError:
     match_file_rules = None
 
+# Phân tích mã độc tĩnh chuyên sâu (hash, entropy, PE, IoC, phân loại họ)
+try:
+    from malware_analyzer import analyze_malware_file
+except ImportError:
+    analyze_malware_file = None
+
 # Try importing parsing and data libraries, with fallback
 try:
     import pandas as pd
@@ -1534,6 +1540,14 @@ class PIIScanAPIHandler(BaseHTTPRequestHandler):
                                     file_signatures = []
                 except Exception:
                     pass
+
+                # Phân tích mã độc tĩnh chuyên sâu (hash, entropy, PE, IoC, phân loại họ)
+                malware_analysis = None
+                if analyze_malware_file is not None:
+                    try:
+                        malware_analysis = analyze_malware_file(file_path)
+                    except Exception:
+                        malware_analysis = None
                 
                 # Deduplicate and group findings by PII type
                 grouped_pii = {}
@@ -1618,6 +1632,7 @@ class PIIScanAPIHandler(BaseHTTPRequestHandler):
                     "entropy": file_entropy,
                     "entropyRisk": file_entropy_risk,
                     "signatures": file_signatures,
+                    "malwareAnalysis": malware_analysis,
                     "riskRating": file_risk,
                     "piiFound": pii_found_list
                 })

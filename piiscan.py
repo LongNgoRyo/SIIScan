@@ -24,7 +24,13 @@ except ImportError:
     classify_finding = get_profile = compute_cvss_from_vector = severity_from_score = None
     shannon_entropy = entropy_flag = owasp_risk_rating = None
 
-# Rule detection theo kiểu YARA (thuần Python, thay thế yara-python)
+# Rule detection theo kiểu YARA (dùng yara-python thật nếu có, fallback yara_style_rules)
+try:
+    from yara_engine import scan_file as yara_scan_file, is_available as yara_available
+except ImportError:
+    yara_scan_file = None
+    yara_available = lambda: False
+
 try:
     from yara_style_rules import match_file_rules
 except ImportError:
@@ -1537,8 +1543,23 @@ class PIIScanAPIHandler(BaseHTTPRequestHandler):
                             file_entropy = shannon_entropy(raw_bytes)
                             if entropy_flag is not None:
                                 file_entropy_risk = entropy_flag(file_entropy)["risk"]
-                            # Quét signature rules (YARA-style) trên nội dung đã đọc
-                            if match_file_rules is not None:
+                            # Quét signature rules: ưu tiên YARA thật, fallback yara_style regex
+                            file_signatures = []
+                            # 1. YARA engine (yara-python)
+                            if yara_scan_file is not None and yara_available():
+                                try:
+                                    yara_matches = yara_scan_file(file_path)
+                                    for ym in yara_matches:
+                                        file_signatures.append({
+                                            "rule_id": ym.get("rule", ""),
+                                            "rule_name": ym.get("meta", {}).get("description", ym.get("rule", "")),
+                                            "cwe": ym.get("meta", {}).get("cwe", ""),
+                                            "mitre": ym.get("meta", {}).get("mitre", ""),
+                                        })
+                                except Exception:
+                                    pass
+                            # 2. Fallback regex (nếu YARA không có hoặc không khớp)
+                            if not file_signatures and match_file_rules is not None:
                                 try:
                                     text_content = raw_bytes.decode("utf-8", errors="ignore")
                                     file_signatures = match_file_rules(text_content)

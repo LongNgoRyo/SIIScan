@@ -17,10 +17,7 @@ https://longngoryo.github.io/SIIScan/
 - **Phân loại họ mã độc**: Webshell, PowerShell fileless, VBScript persistence, Python RAT, Batch, Ransomware, Keylogger, Stealer, Windows PE/ELF...
 
 ### 2. Phát hiện webshell/backdoor
-- `webshell_detector.py`: giải mã obfuscation đa lớp (base64, rot13, hex, gzip, XOR, nối chuỗi)
-- Data-flow analysis: theo dõi biến từ input ($_GET/$_POST) → giải mã → hàm nguy hiểm
-- Signature rules (YARA-style): c99, r57, WSO, b374k, Weevely, China Chopper...
-- Phát hiện polyglot (file ảnh chứa mã nhúng)
+- **Phát hiện webshell/backdoor** bằng **YARA rules thật** (`yara-python` + `rules/malware_rules.yar`) — nhận diện các họ webshell (eval, command exec, reverse shell, upload, PowerShell downloader, Python RAT, VBS persistence) + fallback regex `yara_style_rules.py`
 
 ### 3. Đánh giá (CVSS + CWE + MITRE)
 - Chấm điểm CVSS 3.1 chuẩn FIRST.org
@@ -53,8 +50,10 @@ python3 piiscan.py --path test_dataset/malicious --output-html report_malicious.
 piiscan.py              # Code chính (backend + API)
 webshell_detector.py    # Phát hiện webshell + giải mã obfuscation + data-flow
 malware_analyzer.py     # Phân tích tĩnh: hash/entropy/PE/IoC/phân loại họ
+yara_engine.py          # YARA engine (yara-python) chạy rules thật
+rules/malware_rules.yar # Bộ YARA rules phát hiện mã độc
 cvss_scoring.py         # CVSS 3.1 + CWE + MITRE + risk rating
-yara_style_rules.py     # Signature rules (YARA-style) thuần Python
+yara_style_rules.py     # Fallback regex (khi không có yara-python)
 index.html / app.js / style.css  # Giao diện web
 test_dataset/           # Bộ mẫu kiểm thử
 ```

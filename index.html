@@ -28,7 +28,7 @@
     <div class="nav-container">
       <a href="index.html" class="nav-logo">
         <span class="logo-icon">🔍</span>
-        <span class="logo-text">PII<span class="logo-accent">Scan</span> Server</span>
+        <span class="logo-text">Malware<span class="logo-accent">Analysis</span></span>
       </a>
       <div class="nav-links">
         <a href="index.html" class="nav-link active">Trang chủ</a>
@@ -192,7 +192,7 @@
           <button class="tab active" data-tab="detection">🔍 Danh sách Phát hiện</button>
           <button class="tab" data-tab="malware">🦠 Phân tích Mã độc</button>
           <button class="tab" data-tab="details">📋 Đánh giá & Báo cáo</button>
-          <button class="tab" data-tab="behavior">📈 Tuân thủ & Khắc phục</button>
+          <button class="tab" data-tab="behavior">🛠️ Khắc phục</button>
         </div>
       </div>
 
@@ -229,7 +229,7 @@
         </div>
       </div>
 
-      <!-- Tab 3: Khắc phục tuân thủ -->
+      <!-- Tab khắc phục -->
       <div class="tab-content" id="tab-behavior">
         <div class="behavior-content" id="behaviorContent">
           <!-- Điền bằng JS -->
@@ -242,37 +242,37 @@
   <!-- ===== PHẦN TÍNH NĂNG CỐT LÕI (FEATURES SECTION) ===== -->
   <section class="features-section" id="featuresSection">
     <div class="features-container">
-      <h2 class="section-title">Các Tính năng Cốt lõi của <span class="gradient-text">PIIScan Server</span></h2>
+      <h2 class="section-title">Các Tính năng Cốt lõi của <span class="gradient-text">Malware Analysis</span></h2>
       <div class="features-grid">
         <div class="feature-card">
           <div class="feature-icon">🔍</div>
-          <h3>Quét Máy chủ Tự động</h3>
-          <p>Quét đệ quy toàn bộ thư mục ứng dụng web, nhật ký hệ thống, database và thư mục tải lên trên hệ điều hành Linux/Windows.</p>
+          <h3>Phân tích Tĩnh (Static Analysis)</h3>
+          <p>Mổ xẻ mã độc không cần chạy: nhận diện loại file, trích xuất hash (MD5/SHA256), phân tích PE header, phát hiện packer và obfuscation.</p>
         </div>
         <div class="feature-card">
-          <div class="feature-icon">📑</div>
-          <h3>Bộ lọc & Phân loại rủi ro</h3>
-          <p>Phân loại rủi ro chi tiết: Nguy cơ rất cao (Webshell, backdoor, lệnh thực thi nguy hiểm) và Dữ liệu cá nhân theo Nghị định 13/2023/NĐ-CP.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🛡️</div>
-          <h3>Đánh giá tính Tuân thủ</h3>
-          <p>Ánh xạ trực tiếp lỗ hổng bảo mật và dữ liệu rò rỉ vào các quy định của Nghị định 13 (Việt Nam), tiêu chuẩn PCI-DSS và ISO 27001.</p>
+          <div class="feature-icon">🧬</div>
+          <h3>YARA Rules Detection</h3>
+          <p>Nhận diện mã độc bằng bộ YARA rules thật — đặc trưng chuẩn của phân tích mã độc, cho phép phát hiện các họ webshell, RAT, PowerShell downloader...</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">📊</div>
-          <h3>Báo cáo Chi tiết & Tự động</h3>
-          <p>Tự động tổng hợp dữ liệu, thống kê phân bố rủi ro, quyền truy cập thư mục (CHMOD) và xuất báo cáo CSV/HTML trực quan.</p>
+          <h3>Entropy & Phát hiện Packer</h3>
+          <p>Phân tích entropy Shannon để phát hiện file bị nén/mã hóa (packed), dấu hiệu payload độc bị che giấu.</p>
         </div>
         <div class="feature-card">
-          <div class="feature-icon">⚡</div>
-          <h3>Khắc phục Tự động 1-Click</h3>
-          <p>Thực hiện các biện pháp cô lập mã độc, tự động mã hóa dữ liệu nhạy cảm bằng AES-256 và giới hạn phân quyền tệp tin về CHMOD 600.</p>
+          <div class="feature-icon">🎯</div>
+          <h3>Trích xuất IoC</h3>
+          <p>Tự động trích xuất Indicators of Compromise (IP, URL, domain) — dấu vết C2 của mã độc để phục vụ điều tra.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🦠</div>
+          <h3>Phân loại Họ mã độc</h3>
+          <p>Phân loại Webshell, PowerShell fileless, VBScript persistence, Python RAT, Batch, Ransomware, PE/ELF...</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">🔌</div>
-          <h3>Quét Đa định dạng</h3>
-          <p>Phân tích sâu nội dung các tệp tin cấu hình hệ thống, nhật ký truy cập, các bản sao lưu database và mã nguồn (.env, .sql, .csv, .log, .json, .php, .py, .js).</p>
+          <h3>Đa định dạng</h3>
+          <p>Hỗ trợ phân tích .php, .py, .js, .ps1, .bat, .vbs, .exe, .dll, shell script, macro document...</p>
         </div>
       </div>
     </div>
@@ -283,32 +283,32 @@
     <div class="footer-container">
       <div class="footer-brand">
         <span class="logo-icon">🔍</span>
-        <span class="logo-text">PII<span class="logo-accent">Scan</span> Server</span>
-        <p>Giải pháp quét mã độc tự động và đánh giá tuân thủ bảo mật dữ liệu cá nhân toàn diện cho các máy chủ web hiện đại.</p>
+        <span class="logo-text">Malware<span class="logo-accent">Analysis</span></span>
+        <p>Nền tảng phân tích mã độc tự động: phân tích tĩnh, YARA rules, entropy, PE header, IoC và phân loại họ mã độc.</p>
       </div>
       <div class="footer-links">
         <div class="footer-col">
           <h4>Tính năng</h4>
-          <a href="#">Quét Máy chủ</a>
-          <a href="#">Kiểm toán Tuân thủ</a>
-          <a href="#">Khắc phục tự động</a>
+          <a href="#">Phân tích Tĩnh</a>
+          <a href="#">YARA Detection</a>
+          <a href="#">Trích xuất IoC</a>
         </div>
         <div class="footer-col">
           <h4>Tài nguyên</h4>
           <a href="api.html">Tài liệu API</a>
           <a href="docs.html">Hướng dẫn sử dụng</a>
-          <a href="#">Hướng dẫn Nghị định 13</a>
+          <a href="#">YARA Rules</a>
         </div>
         <div class="footer-col">
           <h4>Thông tin</h4>
-          <a href="#">Công ty</a>
+          <a href="#">Về chúng tôi</a>
           <a href="#">Chính sách bảo mật</a>
           <a href="#">Hỗ trợ kỹ thuật</a>
         </div>
       </div>
     </div>
     <div class="footer-bottom">
-      <p>© 2026 PIIScan Server Pro. Hệ thống kiểm toán máy chủ tự động tuân thủ Nghị định 13/2023/NĐ-CP và tiêu chuẩn quốc tế.</p>
+      <p>© 2026 Malware Analysis Platform. Nền tảng phân tích mã độc cho nghiên cứu và học tập.</p>
     </div>
   </footer>
 

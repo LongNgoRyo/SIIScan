@@ -1077,62 +1077,62 @@ function populateHashInfo() {
     const table = document.getElementById('hashTable');
     if (!table) return;
     
+    const malwareCount = scanResults.filter(r => r.piiFound.some(p => p.name === "Mã độc & Lệnh nguy hiểm (Webshell/Backdoor)")).length;
     const unsecureCount = isRemediated ? 0 : scanResults.filter(r => r.securityStatus !== 'secured').length;
     const securedCount = isRemediated ? scanResults.length : scanResults.filter(r => r.securityStatus === 'secured').length;
     
     table.innerHTML = `
         <div class="stats-row-new">
-            <span class="stat-label-new">Tổng số tệp đã quét</span>
+            <span class="stat-label-new">Tổng số tệp đã phân tích</span>
             <span class="stat-val-new">${scanStats.totalFiles.toLocaleString()}</span>
         </div>
         <div class="stats-row-new">
-            <span class="stat-label-new">Tệp chứa dữ liệu cá nhân</span>
-            <span class="stat-val-new" style="color: var(--accent-primary)">${scanStats.filesWithPii}</span>
+            <span class="stat-label-new">Tệp nhiễm mã độc</span>
+            <span class="stat-val-new" style="color: var(--color-malicious)">${malwareCount}</span>
         </div>
         <div class="stats-row-new">
-            <span class="stat-label-new">Chưa bảo mật (Văn bản thô)</span>
+            <span class="stat-label-new">Chứa lệnh nguy hiểm</span>
             <span class="stat-val-new" style="color: ${unsecureCount > 0 ? 'var(--color-malicious)' : 'var(--color-clean)'}">${unsecureCount}</span>
         </div>
         <div class="stats-row-new">
-            <span class="stat-label-new">Đã bảo mật / Mã hóa</span>
+            <span class="stat-label-new">An toàn / Đã cách ly</span>
             <span class="stat-val-new" style="color: var(--color-clean)">${securedCount}</span>
         </div>
     `;
 }
 
-// Điền các loại DLCN phát hiện nhiều nhất trên Dashboard
+// Điền các họ mã độc phát hiện nhiều nhất trên Dashboard
 function populateQuickDetails() {
     const table = document.getElementById('detailTable');
     if (!table) return;
 
-    // Đếm các thực thể DLCN trên tất cả các tệp tin
-    const piiCounts = {};
+    // Đếm các họ mã độc trên tất cả các tệp
+    const familyCounts = {};
     scanResults.forEach(res => {
-        res.piiFound.forEach(p => {
-            piiCounts[p.name] = (piiCounts[p.name] || 0) + p.count;
-        });
+        if (res.malwareAnalysis && res.malwareAnalysis.family) {
+            const fam = res.malwareAnalysis.family;
+            familyCounts[fam] = (familyCounts[fam] || 0) + 1;
+        }
     });
 
-    const sortedPii = Object.entries(piiCounts)
+    const sortedFam = Object.entries(familyCounts)
         .sort((a, b) => b[1] - a[1])
         .slice(0, 4);
 
     let html = '';
-    sortedPii.forEach(([name, count]) => {
-        const matchingType = piiTypes.find(t => t.name === name);
-        const icon = matchingType ? matchingType.icon : "📋";
+    sortedFam.forEach(([name, count]) => {
         html += `
             <div class="detail-item-new">
                 <span class="detail-label-new clickable-threat" onclick="jumpToDetails()" style="display:flex; align-items:center; gap: 6px;">
-                    <span>${icon}</span> ${name}
+                    <span>🦠</span> ${name}
                 </span>
-                <span class="detail-val-new">${count.toLocaleString()} trường</span>
+                <span class="detail-val-new">${count.toLocaleString()} tệp</span>
             </div>
         `;
     });
 
     if (html === '') {
-        html = '<div style="color: var(--text-muted); font-size: 0.85rem; text-align: center; padding: 10px;">Không phát hiện trường thông tin nhạy cảm nào</div>';
+        html = '<div style="color: var(--text-muted); font-size: 0.85rem; text-align: center; padding: 10px;">Không phát hiện họ mã độc nào</div>';
     }
 
     table.innerHTML = html;
@@ -1238,67 +1238,78 @@ function populateMalwareTab() {
         ${cardsHtml}`;
 }
 
-// Điền Tab 2: Phân tích & Phân bổ dữ liệu cá nhân
+// Điền Tab "Đánh giá & Báo cáo": thống kê mã độc theo họ, mức độ, định dạng
 function populateDetailTab() {
     const content = document.getElementById('detailsContent');
     if (!content) return;
 
-    // Tập hợp số liệu theo loại DLCN
-    const piiCounts = {};
+    // ===== 1. Phân loại mã độc theo họ (family) =====
+    const familyCounts = {};
     scanResults.forEach(res => {
-        res.piiFound.forEach(p => {
-            if (!piiCounts[p.name]) piiCounts[p.name] = 0;
-            piiCounts[p.name] += p.count;
-        });
+        if (res.malwareAnalysis && res.malwareAnalysis.family) {
+            const fam = res.malwareAnalysis.family;
+            familyCounts[fam] = (familyCounts[fam] || 0) + 1;
+        }
     });
 
-    let piiRowsHtml = '';
-    for (const [name, count] of Object.entries(piiCounts)) {
-        const matchingType = piiTypes.find(t => t.name === name);
-        const isSensitive = matchingType && matchingType.level === 'high';
-        const levelText = isSensitive ? 'Nhạy cảm (Nghị định 13)' : 'Cơ bản (Nghị định 13)';
-        const badgeClass = matchingType ? matchingType.level : 'low';
-        piiRowsHtml += `
+    let familyRowsHtml = '';
+    for (const [fam, count] of Object.entries(familyCounts)) {
+        familyRowsHtml += `
             <div class="detail-row" style="display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--border-color);">
-                <span class="detail-label" style="font-weight: 500;">${name}</span>
-                <div style="display:flex; align-items:center; gap: 12px;">
-                    <span class="pii-badge ${badgeClass}">Phân loại: ${levelText}</span>
-                    <span class="detail-val" style="font-family:var(--font-mono); font-weight:600;">${count.toLocaleString()} lượt xuất hiện</span>
-                </div>
+                <span class="detail-label" style="font-weight: 500;">🦠 ${fam}</span>
+                <span class="detail-val" style="font-family:var(--font-mono); font-weight:600; color: var(--color-malicious);">${count} tệp</span>
             </div>`;
     }
-    if (piiRowsHtml === '') {
-        piiRowsHtml = '<div class="detail-row" style="text-align:center; color:var(--text-muted); padding: 12px;">Không phát hiện trường thông tin cá nhân nào.</div>';
+    if (familyRowsHtml === '') {
+        familyRowsHtml = '<div class="detail-row" style="text-align:center; color:var(--text-muted); padding: 12px;">Không phát hiện họ mã độc nào.</div>';
     }
 
-    // Phân tích định dạng tệp
+    // ===== 2. Phân loại theo mức độ nguy hiểm (level) =====
+    const levelCounts = { high: 0, medium: 0, low: 0, safe: 0 };
+    scanResults.forEach(res => {
+        const lv = res.level || 'safe';
+        if (levelCounts[lv] !== undefined) levelCounts[lv]++;
+    });
+    const levelLabels = {
+        high: ['Nghiêm trọng (Critical/High)', 'var(--color-malicious)'],
+        medium: ['Trung bình (Medium)', 'var(--color-warning)'],
+        low: ['Thấp (Low)', '#10B981'],
+        safe: ['An toàn (Safe)', 'var(--color-clean)'],
+    };
+    let levelRowsHtml = '';
+    for (const [lv, cnt] of Object.entries(levelCounts)) {
+        const [label, color] = levelLabels[lv];
+        levelRowsHtml += `
+            <div class="detail-row" style="display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--border-color);">
+                <span class="detail-label" style="font-weight:600; color:${color}; display:flex; align-items:center; gap:8px;"><span style="width:10px; height:10px; border-radius:50%; background:${color}; display:inline-block;"></span>${label}</span>
+                <span class="detail-val" style="font-family:var(--font-mono); color:var(--text-secondary);">${cnt} tệp</span>
+            </div>`;
+    }
+
+    // ===== 3. Phân tích định dạng tệp =====
     const extCounts = {};
-    let totalPiiFiles = 0;
+    let totalFiles = 0;
     scanResults.forEach(res => {
         const parts = res.fileName.split('.');
         const ext = parts.length > 1 ? '.' + parts.pop().toLowerCase() : '.txt';
         extCounts[ext] = (extCounts[ext] || 0) + 1;
-        totalPiiFiles++;
+        totalFiles++;
     });
-
-    const sortedExts = Object.entries(extCounts)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 3);
-
+    const sortedExts = Object.entries(extCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
     let extRowsHtml = '';
     sortedExts.forEach(([ext, count]) => {
-        const percent = Math.round((count / totalPiiFiles) * 100);
+        const percent = totalFiles ? Math.round((count / totalFiles) * 100) : 0;
         extRowsHtml += `
             <div class="detail-row" style="display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--border-color);">
                 <span class="detail-label" style="font-family:var(--font-mono);">${ext}</span>
-                <span class="detail-val" style="color:var(--text-secondary);">${count} tệp tin (${percent}%)</span>
+                <span class="detail-val" style="color:var(--text-secondary);">${count} tệp (${percent}%)</span>
             </div>`;
     });
     if (extRowsHtml === '') {
         extRowsHtml = '<div class="detail-row" style="text-align:center; color:var(--text-muted); padding: 12px;">Không có thông tin</div>';
     }
 
-    // Tính phân bố CVSS (cho dashboard)
+    // ===== 4. Phân bố CVSS =====
     const cvssDist = { Critical: 0, High: 0, Medium: 0, Low: 0 };
     let totalCvssRated = 0;
     scanResults.forEach(res => {
@@ -1324,120 +1335,105 @@ function populateDetailTab() {
             </div>`;
     }
 
-    // Đưa nội dung vào Tab
+    // ===== 5. Thống kê IoC =====
+    const iocSet = new Set();
+    scanResults.forEach(res => {
+        if (res.malwareAnalysis && res.malwareAnalysis.iocs) {
+            const i = res.malwareAnalysis.iocs;
+            (i.ips || []).forEach(x => iocSet.add(x));
+            (i.urls || []).forEach(x => iocSet.add(x));
+            (i.domains || []).forEach(x => iocSet.add(x));
+        }
+    });
+
     content.innerHTML = `
         <div class="detail-card">
-            <h4>📊 Thống kê Phân bổ Dữ liệu Cá nhân</h4>
-            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">Số lượt xuất hiện của các dữ liệu cá nhân cơ bản và nhạy cảm (theo quy định tại Nghị định 13/2023/NĐ-CP) được phát hiện trên máy chủ này.</p>
+            <h4>🦠 Thống kê Phân loại Họ Mã độc</h4>
+            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">Phân nhóm các tệp mã độc theo họ (family) được nhận diện bằng phân tích tĩnh và YARA rules.</p>
             <div class="detail-table">
-                ${piiRowsHtml}
+                ${familyRowsHtml}
             </div>
         </div>
         <div class="detail-card" style="margin-top: 24px;">
-            <h4>🛡️ Phân bố Mức độ Nghiêm trọng Lỗ hổng (CVSS v3.1)</h4>
-            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">Phân loại tệp tin theo điểm CVSS 3.1: Critical (9.0–10.0), High (7.0–8.9), Medium (4.0–6.9), Low (0.1–3.9). Điểm được tính theo chuẩn FIRST.org.</p>
+            <h4>⚠️ Phân bố Mức độ Nguy hiểm</h4>
+            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">Phân loại tệp theo mức độ nguy hiểm dựa trên lệnh thực thi, khả năng khai thác và chuẩn CWE.</p>
+            <div class="detail-table">
+                ${levelRowsHtml}
+            </div>
+        </div>
+        <div class="detail-card" style="margin-top: 24px;">
+            <h4>🛡️ Phân bố Mức độ Nghiêm trọng CVSS v3.1</h4>
+            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">Phân loại tệp theo điểm CVSS 3.1: Critical (9.0–10.0), High (7.0–8.9), Medium (4.0–6.9), Low (0.1–3.9). Tổng: ${totalCvssRated} tệp được đánh giá.</p>
             <div class="detail-table">
                 ${cvssBarsHtml || '<div style="color: var(--text-muted); font-size: 0.85rem; text-align: center; padding: 10px;">Không có lỗ hổng mã độc được đánh giá CVSS.</div>'}
             </div>
         </div>
         <div class="detail-card" style="margin-top: 24px;">
-            <h4>📁 Các Loại Tệp Tin Lưu Trữ Dữ Liệu Nhạy Cảm Phổ Biến</h4>
-            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">Nhận diện định dạng tệp tin có mật độ lưu trữ dữ liệu cá nhân chưa bảo mật cao nhất để ưu tiên xử lý khắc phục.</p>
+            <h4>📁 Các Loại Tệp Tin Được Phân tích</h4>
+            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">Định dạng các tệp đã được phân tích (tuân theo mã nguồn, script và file thực thi).</p>
             <div class="detail-table">
                 ${extRowsHtml}
             </div>
         </div>
-    `;
-
-    // Thêm các thẻ giải thích chi tiết pháp lý cho mỗi loại dữ liệu
-    let theoryHtml = '<div class="detail-card" style="margin-top: 24px;"><h4>💡 Rủi ro Pháp lý & Biện pháp Bảo vệ</h4><p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">Mức độ ảnh hưởng pháp lý tương ứng theo Nghị định 13/2023/NĐ-CP và hướng dẫn áp dụng các biện pháp an toàn kỹ thuật.</p><div style="display: flex; flex-direction: column; gap: 16px;">';
-    for (const [name, count] of Object.entries(piiCounts)) {
-        const desc = piiDescriptions[name] || "Dữ liệu cá nhân phải được bảo vệ đầy đủ bằng các biện pháp mã hóa và phân quyền phù hợp.";
-        const searchLink = `https://www.google.com/search?q=Nghi+dinh+13+2023+ND-CP+bao+ve+du+lieu+ca+nhan+${encodeURIComponent(name)}`;
-        theoryHtml += `
-            <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 16px;">
-                <h5 style="color: var(--accent-primary); margin-bottom: 8px; font-size: 1rem; display: flex; align-items: center; gap: 8px;">
-                    <span>⚠️</span> ${name} (${count} lượt xuất hiện)
-                </h5>
-                <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 12px; line-height: 1.5;">${desc}</p>
-                <a href="${searchLink}" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; color: #60A5FA; text-decoration: none; padding: 6px 12px; background: rgba(59, 130, 246, 0.1); border-radius: 4px; transition: 0.2s;">
-                    <span>🔍</span> Tra cứu Nghị định 13 & Quy định Bảo vệ DLCN
-                </a>
+        <div class="detail-card" style="margin-top: 24px;">
+            <h4>🎯 Tổng hợp Indicators of Compromise (IoC)</h4>
+            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">Các chỉ báo xâm nhập (IP, URL, domain) được trích xuất từ mã độc — dấu vết máy chủ C2.</p>
+            <div class="detail-table">
+                ${iocSet.size ? [...iocSet].map(io => `<div class="detail-row" style="font-family:var(--font-mono); padding:10px 0; border-bottom:1px solid var(--border-color); color: var(--color-warning);">${io}</div>`).join('') : '<div style="color: var(--text-muted); text-align:center; padding:12px;">Không phát hiện IoC.</div>'}
             </div>
-        `;
-    }
-    theoryHtml += '</div></div>';
-    content.innerHTML += theoryHtml;
+        </div>
+    `;
 }
 
-// Điền Tab 3: Báo cáo Tuân thủ Quy định & Hành động Khắc phục
+// Điền Tab "Khắc phục": đánh giá MITRE ATT&CK & hành động khắc phục mã độc
 function populateComplianceTab() {
     const behaviorContent = document.getElementById('behaviorContent');
     if (!behaviorContent) return;
 
-    // ===== Phân loại kết quả quét thành 2 nhóm riêng biệt =====
+    // ===== Phân loại file chứa mã độc =====
     const CLOSE_MALWARE = "Mã độc & Lệnh nguy hiểm (Webshell/Backdoor)";
-
-    // 1. File chứa mã độc (malware/webshell/backdoor)
     const malwareFiles = scanResults.filter(r =>
         r.piiFound.some(p => p.name === CLOSE_MALWARE)
     );
-    // 2. File chứa DLCN (PII) — không phải mã độc
-    const piiFiles = scanResults.filter(r =>
-        r.piiFound.some(p => p.name !== CLOSE_MALWARE)
-    );
-
     const hasMalware = malwareFiles.length > 0;
-    const hasPii = piiFiles.length > 0;
 
-    // Phân loại PII theo mức độ
-    const highPii = scanResults.filter(r =>
-        r.securityStatus === 'unsecured' && r.level === 'high' &&
-        !r.piiFound.some(p => p.name === CLOSE_MALWARE)
-    ).length;
-    const medPii = scanResults.filter(r =>
-        r.securityStatus === 'unsecured' && r.level === 'medium'
-    ).length;
-    const publicPermFiles = scanResults.filter(r => r.permissions && r.permissions.includes("777")).length;
+    // Tổng hợp IoC từ tất cả file
+    const allIocs = new Set();
+    scanResults.forEach(r => {
+        if (r.malwareAnalysis && r.malwareAnalysis.iocs) {
+            const i = r.malwareAnalysis.iocs;
+            (i.ips || []).forEach(x => allIocs.add(x));
+            (i.urls || []).forEach(x => allIocs.add(x));
+            (i.domains || []).forEach(x => allIocs.add(x));
+        }
+    });
 
-    // ===== Xác định trạng thái tổng thể =====
     let overallRating, ratingColor, reportSummary;
     if (isRemediated) {
-        overallRating = "TUÂN THỦ (ĐÃ KHẮC PHỤC)";
+        overallRating = "ĐÃ KHẮC PHỤC";
         ratingColor = "var(--color-clean)";
-        reportSummary = "Tất cả mã độc đã được cách ly và dữ liệu cá nhân nhạy cảm đã được mã hóa AES-256 + giới hạn quyền CHMOD 600. Hệ thống hiện đã an toàn.";
+        reportSummary = "Tất cả mã độc đã được cách ly và hệ thống đã được làm sạch. Không còn dấu hiệu xâm nhập.";
     } else if (hasMalware) {
-        overallRating = "NGUY HIỂM (PHÁT HIỆN MÃ ĐỘC)";
+        overallRating = "NGUY HIỂM (MÃ ĐỘC)";
         ratingColor = "var(--color-malicious)";
-        reportSummary = `Phát hiện ${malwareFiles.length} tệp tin chứa mã độc (webshell/backdoor). Hệ thống có thể đã bị xâm nhập — kẻ tấn công có khả năng thực thi lệnh từ xa, đánh cắp dữ liệu và duy trì quyền truy cập ngầm.`;
-    } else if (hasPii) {
-        overallRating = "KHÔNG TUÂN THỦ (RÒ RỈ DLCN)";
-        ratingColor = "var(--color-warning)";
-        reportSummary = `Phát hiện ${piiFiles.length} tệp tin chứa dữ liệu cá nhân chưa mã hóa (DLCN văn bản thô). Không phát hiện mã độc, nhưng tồn tại nguy cơ rò rỉ dữ liệu cá nhân vi phạm Nghị định 13/2023/NĐ-CP.`;
+        reportSummary = `Phát hiện ${malwareFiles.length} tệp chứa mã độc (webshell/backdoor/RAT). Hệ thống có thể đã bị xâm nhập — kẻ tấn công có khả năng thực thi lệnh từ xa và duy trì quyền kiểm soát ngầm.`;
     } else {
-        overallRating = "AN TOÀN / TUÂN THỦ";
+        overallRating = "AN TOÀN";
         ratingColor = "var(--color-clean)";
-        reportSummary = "Không phát hiện mã độc hay dữ liệu cá nhân lộ dưới dạng văn bản thô. Hệ thống đáp ứng các tiêu chuẩn bảo mật cơ bản.";
+        reportSummary = "Không phát hiện mã độc trong phạm vi quét. Hệ thống hiện không có dấu hiệu bị xâm nhập.";
     }
-
-    // ===== Đánh giá từng tiêu chuẩn riêng biệt =====
-    const nd13Status = (isRemediated || (!hasPii && !hasMalware)) ? "ĐẠT" : "KHÔNG ĐẠT";
-    const pciStatus = (isRemediated || highPii === 0) ? "ĐẠT" : "KHÔNG ĐẠT";
-    const isoStatus = (isRemediated || publicPermFiles === 0) ? "ĐẠT" : "KHÔNG ĐẠT";
-    const malwareStatus = (isRemediated || !hasMalware) ? "ĐẠT" : "KHÔNG ĐẠT";
-    const owaspStatus = (isRemediated || !hasMalware) ? "ĐẠT" : "KHÔNG ĐẠT";
 
     behaviorContent.innerHTML = `
         <div class="detail-card" style="margin-bottom: 24px;">
-            <h4>📈 Kết quả Đánh giá Tuân thủ Bảo mật Dữ liệu</h4>
-            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">Đánh giá hiện trạng bảo mật dựa trên phân tích mã độc, phân quyền và dữ liệu lưu trữ thực tế trên máy chủ.</p>
+            <h4>🛡️ Kết quả Phân tích & Đánh giá Mã độc</h4>
+            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">Đánh giá hiện trạng an toàn của hệ thống dựa trên phân tích tĩnh mã độc, YARA rules và trích xuất IoC.</p>
             <div class="detail-table">
                 <div class="detail-row" style="display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--border-color);">
-                    <span class="detail-label" style="font-weight:600;">Trạng thái Tuân thủ Tổng thể</span>
+                    <span class="detail-label" style="font-weight:600;">Trạng thái tổng thể</span>
                     <span class="detail-val" style="color: ${ratingColor}; font-weight: bold; font-size: 1.05rem;">${overallRating}</span>
                 </div>
                 <div class="detail-row" style="display:flex; justify-content:space-between; align-items:start; padding:12px 0;">
-                    <span class="detail-label" style="font-weight:600; width: 250px;">Kết luận Kiểm toán</span>
+                    <span class="detail-label" style="font-weight:600; width: 250px;">Kết luận phân tích</span>
                     <span class="detail-val" style="text-align: right; color: var(--text-secondary); line-height: 1.5;">${reportSummary}</span>
                 </div>
                 <div class="detail-row" style="display:flex; justify-content:space-between; align-items:center; padding:12px 0;">
@@ -1445,103 +1441,68 @@ function populateComplianceTab() {
                     <span class="detail-val" style="color: ${hasMalware ? 'var(--color-malicious)' : 'var(--color-clean)'}; font-weight: bold;">${malwareFiles.length} tệp</span>
                 </div>
                 <div class="detail-row" style="display:flex; justify-content:space-between; align-items:center; padding:12px 0;">
-                    <span class="detail-label" style="font-weight:600;">Tệp chứa DLCN chưa bảo mật</span>
-                    <span class="detail-val" style="color: ${hasPii ? 'var(--color-warning)' : 'var(--color-clean)'}; font-weight: bold;">${piiFiles.length} tệp</span>
+                    <span class="detail-label" style="font-weight:600;">Tổng IoC (IP/URL/domain)</span>
+                    <span class="detail-val" style="color: ${allIocs.size ? 'var(--color-warning)' : 'var(--color-clean)'}; font-weight: bold;">${allIocs.size} chỉ báo</span>
                 </div>
             </div>
         </div>
 
         <div class="detail-card" style="margin-bottom: 24px;">
-            <h4>📋 Bảng kiểm toán Quy định Pháp lý & Tiêu chuẩn Bảo mật</h4>
+            <h4>📋 Đánh giá theo Khung phát hiện mã độc</h4>
             <div class="compliance-grid">
-                
-                <!-- 1. Mã độc / Webshell (quan trọng nhất) -->
                 <div class="compliance-card">
-                    <div class="compliance-status-icon">${malwareStatus === 'ĐẠT' ? '🟢' : '🔴'}</div>
+                    <div class="compliance-status-icon">${hasMalware ? '🔴' : '🟢'}</div>
                     <div class="compliance-details">
-                        <div class="compliance-article">LUẬT AN NINH MẠNG - ĐIỀU 8 & 19</div>
-                        <div class="compliance-title">Phòng chống Mã độc & Tấn công mạng</div>
-                        <div class="compliance-desc">Nghiêm cấm và yêu cầu ngăn chặn hành vi phát tán mã độc, cài backdoor, chiếm quyền điều khiển hệ thống thông tin. Máy chủ không được tồn tại webshell hoặc mã thực thi lệnh trái phép.</div>
-                        <div class="compliance-status-text ${malwareStatus === 'ĐẠT' ? 'pass' : 'fail'}">
-                            <span>Hiện trạng:</span> ${malwareStatus === 'ĐẠT' ? 'ĐẠT (Không phát hiện mã độc)' : `KHÔNG ĐẠT (Phát hiện ${malwareFiles.length} tệp mã độc / webshell)`}
+                        <div class="compliance-article">MITRE ATT&CK - T1059 / T1505.003</div>
+                        <div class="compliance-title">Thực thi lệnh & Webshell</div>
+                        <div class="compliance-desc">Phát hiện kỹ thuật thực thi mã/lệnh trái phép và webshell (command &amp; scripting interpreter, server software component).</div>
+                        <div class="compliance-status-text ${hasMalware ? 'fail' : 'pass'}">
+                            <span>Hiện trạng:</span> ${hasMalware ? `Phát hiện ${malwareFiles.length} tệp thực thi lệnh trái phép` : 'Không phát hiện kỹ thuật thực thi mã'}
                         </div>
                     </div>
                 </div>
-
-                <!-- 2. Nghị định 13 DLCN -->
                 <div class="compliance-card">
-                    <div class="compliance-status-icon">${nd13Status === 'ĐẠT' ? '🟢' : '🔴'}</div>
+                    <div class="compliance-status-icon">${hasMalware ? '🔴' : '🟢'}</div>
                     <div class="compliance-details">
-                        <div class="compliance-article">NGHỊ ĐỊNH 13/2023/NĐ-CP - ĐIỀU 36 & 37</div>
-                        <div class="compliance-title">Bảo vệ Dữ liệu Cá nhân (DLCN)</div>
-                        <div class="compliance-desc">Yêu cầu áp dụng biện pháp quản lý và kỹ thuật (mã hóa, kiểm soát truy cập) để bảo vệ DLCN, tránh rò rỉ dữ liệu nhạy cảm dạng văn bản thô.</div>
-                        <div class="compliance-status-text ${nd13Status === 'ĐẠT' ? 'pass' : 'fail'}">
-                            <span>Hiện trạng:</span> ${nd13Status === 'ĐẠT' ? 'ĐẠT (Dữ liệu được bảo vệ đúng quy định)' : 'KHÔNG ĐẠT (Dữ liệu cá nhân để lộ dạng văn bản thô)'}
+                        <div class="compliance-article">MITRE ATT&CK - T1027 (Obfuscated Files)</div>
+                        <div class="compliance-title">Làm rối & che giấu mã độc</div>
+                        <div class="compliance-desc">Phát hiện kỹ thuật làm rối mã (base64, gzip, XOR, nối chuỗi) dùng để né tránh phát hiện và vượt tường lửa ứng dụng.</div>
+                        <div class="compliance-status-text ${hasMalware ? 'fail' : 'pass'}">
+                            <span>Hiện trạng:</span> ${hasMalware ? 'Phát hiện mã độc dùng né tránh/làm rối' : 'Không phát hiện mã làm rối'}
                         </div>
                     </div>
                 </div>
-
-                <!-- 3. PCI-DSS -->
                 <div class="compliance-card">
-                    <div class="compliance-status-icon">${pciStatus === 'ĐẠT' ? '🟢' : '🔴'}</div>
+                    <div class="compliance-status-icon">${allIocs.size ? '🟡' : '🟢'}</div>
                     <div class="compliance-details">
-                        <div class="compliance-article">PCI-DSS - YÊU CẦU 3</div>
-                        <div class="compliance-title">Bảo vệ Dữ liệu Chủ thẻ & Giao dịch</div>
-                        <div class="compliance-desc">Bắt buộc mã hóa mạnh, ẩn hoặc cắt cụt thông tin thẻ tín dụng, số tài khoản ngân hàng khi lưu trữ trên máy chủ.</div>
-                        <div class="compliance-status-text ${pciStatus === 'ĐẠT' ? 'pass' : 'fail'}">
-                            <span>Hiện trạng:</span> ${pciStatus === 'ĐẠT' ? 'ĐẠT (Thông tin thanh toán được bảo vệ)' : 'KHÔNG ĐẠT (Thông tin thẻ/tài khoản lưu trữ không an toàn)'}
+                        <div class="compliance-article">MITRE ATT&CK - T1071 (C2 Channel)</div>
+                        <div class="compliance-title">Kênh Điều khiển & Ra lệnh (C2)</div>
+                        <div class="compliance-desc">Trích xuất IoC (IP/URL/domain) — dấu vết máy chủ điều khiển (C2) mà mã độc kết nối về. Cần chặn tại tường lửa.</div>
+                        <div class="compliance-status-text ${allIocs.size ? 'fail' : 'pass'}">
+                            <span>Hiện trạng:</span> ${allIocs.size ? `Phát hiện ${allIocs.size} IoC cần chặn` : 'Không phát hiện IoC'}
                         </div>
                     </div>
                 </div>
-
-                <!-- 4. ISO 27001 -->
-                <div class="compliance-card">
-                    <div class="compliance-status-icon">${isoStatus === 'ĐẠT' ? '🟢' : '🔴'}</div>
-                    <div class="compliance-details">
-                        <div class="compliance-article">ISO/IEC 27001 - KIỂM SOÁT A.8.24 & A.5.15</div>
-                        <div class="compliance-title">Kiểm soát Truy cập & Quản lý Khóa mật mã</div>
-                        <div class="compliance-desc">Tệp cấu hình quan trọng (.env, database.config) và tệp chứa DLCN phải phân quyền chặt chẽ (CHMOD 600), ngăn quyền đọc/ghi công khai.</div>
-                        <div class="compliance-status-text ${isoStatus === 'ĐẠT' ? 'pass' : 'fail'}">
-                            <span>Hiện trạng:</span> ${isoStatus === 'ĐẠT' ? 'ĐẠT (Quyền truy cập được giới hạn an toàn)' : 'KHÔNG ĐẠT (Tệp cấu hình/nhạy cảm có quyền đọc/ghi công khai)'}
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 5. OWASP Top 10 -->
-                <div class="compliance-card">
-                    <div class="compliance-status-icon">${owaspStatus === 'ĐẠT' ? '🟢' : '🔴'}</div>
-                    <div class="compliance-details">
-                        <div class="compliance-article">OWASP TOP 10 - A03:2021 INJECTION</div>
-                        <div class="compliance-title">Ngăn chặn Tiêm mã & Thực thi lệnh</div>
-                        <div class="compliance-desc">Ứng dụng phải ngăn chặn tiêm mã (Code/Command Injection) — là nguyên nhân dẫn đến webshell và RCE. Hàm thực thi lệnh không được tiếp nhận dữ liệu người dùng.</div>
-                        <div class="compliance-status-text ${owaspStatus === 'ĐẠT' ? 'pass' : 'fail'}">
-                            <span>Hiện trạng:</span> ${owaspStatus === 'ĐẠT' ? 'ĐẠT (Không phát hiện điểm tiêm mã)' : 'KHÔNG ĐẠT (Phát hiện mã độc thực thi lệnh hệ thống)'}
-                        </div>
-                    </div>
-                </div>
-
             </div>
         </div>
 
         <div class="detail-card">
-            <h4>🛠️ Hành động Khắc phục Bảo mật Tự động</h4>
-            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">Áp dụng các biện pháp kiểm soát kỹ thuật tức thì để thắt chặt an toàn và đưa hệ thống về trạng thái tuân thủ pháp luật.</p>
-            
+            <h4>🛠️ Hành động Khắc phục Mã độc</h4>
+            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">Áp dụng các biện pháp ngăn chặn và loại bỏ mã độc khỏi hệ thống.</p>
             <div style="background: rgba(255, 255, 255, 0.02); padding: 16px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); margin-bottom: 20px; display: flex; flex-direction: column; gap: 8px;">
                 <div style="font-size: 0.9rem; color: var(--text-primary); display:flex; align-items:center; gap: 8px;">
-                    <span>🛡️</span> <strong>${hasMalware ? 'Cách ly mã độc: ' + malwareFiles.length + ' tệp webshell/backdoor cần đổi sang đuôi .quarantine và thu hồi quyền thực thi.' : 'Cách ly mã độc: Không có mã độc để xử lý.'}</strong>
+                    <span>🛡️</span> <strong>Cách ly mã độc:</strong> ${hasMalware ? `${malwareFiles.length} tệp webshell/backdoor/RAT cần cách ly (đổi đuôi .quarantine) và thu hồi quyền thực thi.` : 'Không có mã độc cần xử lý.'}
                 </div>
                 <div style="font-size: 0.9rem; color: var(--text-primary); display:flex; align-items:center; gap: 8px;">
-                    <span>🔐</span> <strong>Mã hóa AES-256:</strong> Mã hóa nội dung các tệp tin chứa dữ liệu cá nhân nhạy cảm.
+                    <span>🔌</span> <strong>Chặn IoC (C2):</strong> ${allIocs.size ? `Chặn ${allIocs.size} địa chỉ IP/domain trong tường lửa để cắt liên lạc về máy chủ điều khiển.` : 'Không có IoC cần chặn.'}
                 </div>
                 <div style="font-size: 0.9rem; color: var(--text-primary); display:flex; align-items:center; gap: 8px;">
-                    <span>🔒</span> <strong>Thắt chặt Phân quyền (CHMOD):</strong> Thu hồi quyền truy cập công khai/nhóm, thiết lập tệp nhạy cảm về CHMOD 600.
+                    <span>🔍</span> <strong>Quét lại bằng YARA:</strong> Chạy lại bộ YARA rules để xác nhận mã độc đã được loại bỏ hoàn toàn.
                 </div>
                 <div style="font-size: 0.9rem; color: var(--text-primary); display:flex; align-items:center; gap: 8px;">
-                    <span>📋</span> <strong>Ghi Nhật ký Kiểm toán:</strong> Kết xuất báo cáo chi tiết phục vụ rà soát nội bộ.
+                    <span>📋</span> <strong>Ghi Nhật ký phân tích:</strong> Kết xuất báo cáo chi tiết hash, entropy, IoC phục vụ điều tra sự cố.
                 </div>
             </div>
-
             <div>
                 <button class="btn-primary" onclick="executeRecommendations()">${isRemediated ? '✅ Đã áp dụng khắc phục' : 'Thực hiện Khắc phục Tự động'}</button>
             </div>
@@ -2168,10 +2129,10 @@ function exportReport() {
         let statusColor = '';
         
         if (res.piiFound.length > 0) {
-            statusText = isRemediated ? 'Đã khắc phục (CHMOD 600)' : (res.securityStatus === 'unsecured' ? 'Chưa bảo mật (Văn bản thô)' : 'Được cảnh báo / Bảo vệ');
+            statusText = isRemediated ? 'Đã cách ly mã độc' : (res.securityStatus === 'unsecured' ? 'Nhiễm mã độc' : 'Được cảnh báo');
             statusColor = isRemediated ? '#10B981' : (res.securityStatus === 'unsecured' ? '#EF4444' : '#F59E0B');
         } else {
-            statusText = 'An toàn / Tuân thủ';
+            statusText = 'An toàn';
             statusColor = '#10B981';
         }
 
@@ -2241,12 +2202,21 @@ function exportReport() {
             </div>`;
     });
 
-    // ===== Phân loại mã độc / DLCN (dùng cho bảng tuân thủ pháp lý trong PDF) =====
+    // ===== Phân loại mã độc / IoC (dùng cho bảng đánh giá MITRE trong PDF) =====
     const CLS_MAL = "Mã độc & Lệnh nguy hiểm (Webshell/Backdoor)";
     const pdfMalwareFiles = scanResults.filter(r => r.piiFound.some(p => p.name === CLS_MAL));
-    const pdfPiiFiles = scanResults.filter(r => r.piiFound.some(p => p.name !== CLS_MAL));
     const pdfHasMalware = pdfMalwareFiles.length > 0;
-    const pdfHasPii = pdfPiiFiles.length > 0;
+    // Tổng IoC từ tất cả file
+    const _pdfIocSet = new Set();
+    scanResults.forEach(r => {
+        if (r.malwareAnalysis && r.malwareAnalysis.iocs) {
+            const i = r.malwareAnalysis.iocs;
+            (i.ips || []).forEach(x => _pdfIocSet.add(x));
+            (i.urls || []).forEach(x => _pdfIocSet.add(x));
+            (i.domains || []).forEach(x => _pdfIocSet.add(x));
+        }
+    });
+    const pdfIocCount = _pdfIocSet.size;
 
     // Thiết lập nội dung HTML cho báo cáo in
     reportContainer.innerHTML = `
@@ -2321,10 +2291,10 @@ function exportReport() {
         <div class="pdf-page" style="min-height: 1120px; display: flex; flex-direction: column; justify-content: space-between; border: 15px solid #1E3A8A; padding: 60px 80px;">
             <div style="text-align: center; margin-top: 50px;">
                 <div style="font-size: 4.5rem; margin-bottom: 20px;">🛡️</div>
-                <h1 style="font-size: 2.1rem; font-weight: 800; color: #1E3A8A; line-height: 1.3; margin: 0 0 10px 0; letter-spacing: -0.5px;">BÁO CÁO KIỂM TOÁN AN TOÀN THÔNG TIN &</h1>
-                <h1 style="font-size: 1.9rem; font-weight: 800; color: #3B82F6; line-height: 1.3; margin: 0 0 20px 0; letter-spacing: -0.5px;">TUÂN THỦ BẢO VỆ DỮ LIỆU CÁ NHÂN</h1>
+                <h1 style="font-size: 2.1rem; font-weight: 800; color: #1E3A8A; line-height: 1.3; margin: 0 0 10px 0; letter-spacing: -0.5px;">BÁO CÁO PHÂN TÍCH MÃ ĐỘC</h1>
+                <h1 style="font-size: 1.9rem; font-weight: 800; color: #3B82F6; line-height: 1.3; margin: 0 0 20px 0; letter-spacing: -0.5px;">STATIC MALWARE ANALYSIS</h1>
                 <div style="width: 120px; height: 5px; background: #3B82F6; margin: 30px auto;"></div>
-                <p style="font-size: 1.2rem; color: #4B5563; font-weight: 500; margin: 0;">Tiêu chuẩn đánh giá: Nghị định 13/2023/NĐ-CP & PCI-DSS & ISO 27001</p>
+                <p style="font-size: 1.2rem; color: #4B5563; font-weight: 500; margin: 0;">Tiêu chuẩn đánh giá: MITRE ATT&CK & CWE & CVSS 3.1 & YARA Rules</p>
             </div>
 
             <div style="background: #F3F4F6; padding: 30px 40px; border-radius: 12px; margin: 40px 0;">
@@ -2339,11 +2309,11 @@ function exportReport() {
                         <td style="color: #111827; padding: 0;">${scanDate}</td>
                     </tr>
                     <tr style="height: 35px;">
-                        <td style="font-weight: bold; color: #4B5563; padding: 0;">Công cụ kiểm tra:</td>
-                        <td style="color: #111827; padding: 0;">PIIScan Server Pro (Phiên bản 2.5)</td>
+                        <td style="font-weight: bold; color: #4B5563; padding: 0;">Công cụ phân tích:</td>
+                        <td style="color: #111827; padding: 0;">Malware Analysis Platform (phiên bản 3.0)</td>
                     </tr>
                     <tr style="height: 35px;">
-                        <td style="font-weight: bold; color: #4B5563; padding: 0;">Điểm số An toàn:</td>
+                        <td style="font-weight: bold; color: #4B5563; padding: 0;">Mức độ Nguy hiểm:</td>
                         <td style="color: ${ratingColor}; padding: 0; font-weight: bold; font-size: 1.1rem;">${securityScore} / 100 Điểm</td>
                     </tr>
                     <tr style="height: 35px;">
@@ -2354,8 +2324,8 @@ function exportReport() {
             </div>
 
             <div style="text-align: center; font-size: 0.85rem; color: #6B7280; line-height: 1.6;">
-                <p style="margin: 0; font-weight: 600; color: #374151;">PHÁT HÀNH BỞI HỆ THỐNG PIISCAN SERVER PRO AUTOMATION</p>
-                <p style="margin: 4px 0 0 0;">Tài liệu mật - Chỉ sử dụng lưu hành nội bộ và phục vụ công tác khắc phục lỗ hổng hệ thống.</p>
+                <p style="margin: 0; font-weight: 600; color: #374151;">PHÁT HÀNH BỞI HỆ THỐNG MALWARE ANALYSIS PLATFORM</p>
+                <p style="margin: 4px 0 0 0;">Tài liệu mật - Chỉ sử dụng lưu hành nội bộ và phục vụ công tác loại bỏ mã độc khỏi hệ thống.</p>
             </div>
         </div>
 
@@ -2370,7 +2340,7 @@ function exportReport() {
 
             <h3 style="color: #1E3A8A; font-size: 1.25rem; margin-top: 0; margin-bottom: 12px; border-left: 4px solid #3B82F6; padding-left: 10px;">I. Tóm tắt Số liệu Kiểm toán</h3>
             <p style="font-size: 0.9rem; color: #4B5563; line-height: 1.55; margin-bottom: 15px;">
-                Báo cáo này cung cấp thông tin kiểm tra tổng quát trạng thái lưu trữ thông tin cá nhân và kiểm tra mã độc trên máy chủ. Kết quả quét được đối chiếu trực tiếp với các quy chuẩn kỹ thuật của **Nghị định 13/2023/NĐ-CP (Việt Nam)**, tiêu chuẩn thẻ thanh toán **PCI-DSS**, và tiêu chuẩn an toàn thông tin **ISO/IEC 27001**.
+                Báo cáo này cung cấp kết quả phân tích mã độc tĩnh trên máy chủ. Mỗi tệp được mổ xẻ bằng kỹ thuật phân tích tĩnh (hash, entropy), đối chiếu với **YARA rules** và ánh xạ vào khung **MITRE ATT&CK**, chuẩn **CWE** và thang điểm **CVSS 3.1**.
             </p>
 
             <table class="pdf-table" style="margin-bottom: 20px;">
@@ -2386,61 +2356,61 @@ function exportReport() {
                         <td style="text-align: right; font-weight: bold; font-family: monospace;">${scanStats.totalFiles}</td>
                     </tr>
                     <tr>
-                        <td>Tệp tin phát hiện chứa dữ liệu cá nhân (DLCN) hoặc mã độc</td>
+                        <td>Tệp tin phát hiện có mã độc (webshell/backdoor/RAT)</td>
                         <td style="text-align: right; font-weight: bold; font-family: monospace; color: #EF4444;">${scanStats.filesWithPii}</td>
                     </tr>
                     <tr>
-                        <td>Số lượng tệp chưa được bảo mật (Lưu trữ dạng thô / Plaintext)</td>
+                        <td>Số lượng tệp chứa lệnh nguy hiểm chưa khắc phục</td>
                         <td style="text-align: right; font-weight: bold; font-family: monospace; color: #EF4444;">${isRemediated ? 0 : scanResults.filter(r => r.securityStatus !== 'secured').length}</td>
                     </tr>
                     <tr>
-                        <td>Số lượng tệp được bảo vệ tốt (Mã hóa / CHMOD 600)</td>
+                        <td>Số lượng tệp an toàn (không phát hiện mã độc)</td>
                         <td style="text-align: right; font-weight: bold; font-family: monospace; color: #10B981;">${isRemediated ? scanResults.length : scanResults.filter(r => r.securityStatus === 'secured').length}</td>
                     </tr>
                 </tbody>
             </table>
 
-            <h3 style="color: #1E3A8A; font-size: 1.25rem; margin-top: 20px; margin-bottom: 12px; border-left: 4px solid #3B82F6; padding-left: 10px;">II. Đánh giá Tính Tuân thủ Pháp luật & Tiêu chuẩn</h3>
+            <h3 style="color: #1E3A8A; font-size: 1.25rem; margin-top: 20px; margin-bottom: 12px; border-left: 4px solid #3B82F6; padding-left: 10px;">II. Đánh giá theo Khung MITRE ATT&CK</h3>
             
             <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;">
                 <div style="border: 1px solid #E5E7EB; border-radius: 8px; padding: 12px;">
                     <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
-                        <strong style="font-size: 0.88rem; color: #1E3A8A;">1. Luật An ninh mạng (Điều 8 & 19) — Phòng chống Mã độc</strong>
+                        <strong style="font-size: 0.88rem; color: #1E3A8A;">1. T1059 / T1505.003 — Thực thi lệnh & Webshell</strong>
                         <span class="badge-pdf ${ (isRemediated || !pdfHasMalware) ? 'pass' : 'fail' }">${ (isRemediated || !pdfHasMalware) ? 'ĐẠT' : 'CHƯA ĐẠT' }</span>
                     </div>
-                    <p style="margin: 0; font-size: 0.78rem; color: #4B5563; line-height: 1.45;">Nghiêm cấm phát tán mã độc, cài backdoor, chiếm quyền điều khiển hệ thống. ${pdfHasMalware ? `Phát hiện ${pdfMalwareFiles.length} tệp mã độc / webshell cần cách ly ngay.` : 'Không phát hiện mã độc trên máy chủ.'}</p>
+                    <p style="margin: 0; font-size: 0.78rem; color: #4B5563; line-height: 1.45;">Phát hiện kỹ thuật thực thi mã/lệnh trái phép (command &amp; scripting interpreter) và webshell. ${pdfHasMalware ? `Phát hiện ${pdfMalwareFiles.length} tệp mã độc cần cách ly ngay.` : 'Không phát hiện mã độc trên máy chủ.'}</p>
                 </div>
 
                 <div style="border: 1px solid #E5E7EB; border-radius: 8px; padding: 12px;">
                     <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
-                        <strong style="font-size: 0.88rem; color: #1E3A8A;">2. Nghị định 13/2023/NĐ-CP (Bảo vệ dữ liệu cá nhân)</strong>
-                        <span class="badge-pdf ${ (isRemediated || (!pdfHasPii && !pdfHasMalware)) ? 'pass' : 'fail' }">${ (isRemediated || (!pdfHasPii && !pdfHasMalware)) ? 'ĐẠT' : 'CHƯA ĐẠT' }</span>
-                    </div>
-                    <p style="margin: 0; font-size: 0.78rem; color: #4B5563; line-height: 1.45;">Yêu cầu mã hóa thông tin nhạy cảm (CCCD, tài khoản ngân hàng, sinh trắc học, sức khỏe) khi lưu trữ và kiểm soát quyền truy cập chặt chẽ. Lưu plaintext vi phạm Điều 36.</p>
-                </div>
-
-                <div style="border: 1px solid #E5E7EB; border-radius: 8px; padding: 12px;">
-                    <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
-                        <strong style="font-size: 0.88rem; color: #1E3A8A;">3. Tiêu chuẩn PCI-DSS (Yêu cầu 3)</strong>
-                        <span class="badge-pdf ${ (isRemediated || (scanResults.filter(r => r.level === 'high' && r.securityStatus === 'unsecured' && !r.piiFound.some(p => p.name === CLS_MAL)).length === 0)) ? 'pass' : 'fail' }">${ (isRemediated || (scanResults.filter(r => r.level === 'high' && r.securityStatus === 'unsecured' && !r.piiFound.some(p => p.name === CLS_MAL)).length === 0)) ? 'ĐẠT' : 'CHƯA ĐẠT' }</span>
-                    </div>
-                    <p style="margin: 0; font-size: 0.78rem; color: #4B5563; line-height: 1.45;">Yêu cầu bảo vệ dữ liệu chủ thẻ lưu trữ. Cấm lưu plaintext số thẻ tín dụng hoặc thông tin giao dịch tài chính nhạy cảm.</p>
-                </div>
-
-                <div style="border: 1px solid #E5E7EB; border-radius: 8px; padding: 12px;">
-                    <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
-                        <strong style="font-size: 0.88rem; color: #1E3A8A;">4. Tiêu chuẩn ISO/IEC 27001 (Kiểm soát truy cập & Phân quyền)</strong>
-                        <span class="badge-pdf ${ (isRemediated || (scanResults.filter(r => r.permissions && r.permissions.includes("777")).length === 0)) ? 'pass' : 'fail' }">${ (isRemediated || (scanResults.filter(r => r.permissions && r.permissions.includes("777")).length === 0)) ? 'ĐẠT' : 'CHƯA ĐẠT' }</span>
-                    </div>
-                    <p style="margin: 0; font-size: 0.78rem; color: #4B5563; line-height: 1.45;">Đảm bảo các tệp chứa dữ liệu quan trọng hoặc tệp cấu hình được phân quyền truy cập giới hạn, tránh quyền đọc/ghi công khai (CHMOD 777 hoặc 755).</p>
-                </div>
-
-                <div style="border: 1px solid #E5E7EB; border-radius: 8px; padding: 12px;">
-                    <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
-                        <strong style="font-size: 0.88rem; color: #1E3A8A;">5. OWASP Top 10 (A03:2021 Injection)</strong>
+                        <strong style="font-size: 0.88rem; color: #1E3A8A;">2. T1027 — Làm rối & che giấu mã (Obfuscation)</strong>
                         <span class="badge-pdf ${ (isRemediated || !pdfHasMalware) ? 'pass' : 'fail' }">${ (isRemediated || !pdfHasMalware) ? 'ĐẠT' : 'CHƯA ĐẠT' }</span>
                     </div>
-                    <p style="margin: 0; font-size: 0.78rem; color: #4B5563; line-height: 1.45;">Ngăn chặn tiêm mã (Code/Command Injection) — nguyên nhân dẫn đến webshell và RCE. ${pdfHasMalware ? 'Phát hiện mã độc thực thi lệnh hệ thống vi phạm tiêu chuẩn.' : 'Không phát hiện điểm tiêm mã.'}</p>
+                    <p style="margin: 0; font-size: 0.78rem; color: #4B5563; line-height: 1.45;">Phát hiện kỹ thuật làm rối mã (base64, gzip, XOR, nối chuỗi) dùng để né tránh phát hiện và vượt tường lửa ứng dụng (WAF).</p>
+                </div>
+
+                <div style="border: 1px solid #E5E7EB; border-radius: 8px; padding: 12px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
+                        <strong style="font-size: 0.88rem; color: #1E3A8A;">3. T1071 — Kênh Điều khiển (C2)</strong>
+                        <span class="badge-pdf ${ (isRemediated || (typeof pdfIocCount === 'number' && pdfIocCount === 0)) ? 'pass' : 'fail' }">${ (isRemediated || (typeof pdfIocCount === 'number' && pdfIocCount === 0)) ? 'ĐẠT' : 'CHƯA ĐẠT' }</span>
+                    </div>
+                    <p style="margin: 0; font-size: 0.78rem; color: #4B5563; line-height: 1.45;">Trích xuất IoC (IP/URL/domain) — dấu vết máy chủ C2 mà mã độc kết nối về. ${(typeof pdfIocCount === 'number' && pdfIocCount > 0) ? `Phát hiện ${pdfIocCount} IoC cần chặn tại tường lửa.` : 'Không phát hiện IoC.'}</p>
+                </div>
+
+                <div style="border: 1px solid #E5E7EB; border-radius: 8px; padding: 12px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
+                        <strong style="font-size: 0.88rem; color: #1E3A8A;">4. T1027.005 / T1140 — Mã hóa & Giải mã payload</strong>
+                        <span class="badge-pdf ${ (isRemediated || !pdfHasMalware) ? 'pass' : 'fail' }">${ (isRemediated || !pdfHasMalware) ? 'ĐẠT' : 'CHƯA ĐẠT' }</span>
+                    </div>
+                    <p style="margin: 0; font-size: 0.78rem; color: #4B5563; line-height: 1.45;">Phát hiện payload mã hóa (base64, AES, XOR) được giải mã tại thời điểm thực thi để né tránh phát hiện tĩnh.</p>
+                </div>
+
+                <div style="border: 1px solid #E5E7EB; border-radius: 8px; padding: 12px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
+                        <strong style="font-size: 0.88rem; color: #1E3A8A;">5. T1105 — Tải payload / Nguy cơ tiêm mã</strong>
+                        <span class="badge-pdf ${ (isRemediated || !pdfHasMalware) ? 'pass' : 'fail' }">${ (isRemediated || !pdfHasMalware) ? 'ĐẠT' : 'CHƯA ĐẠT' }</span>
+                    </div>
+                    <p style="margin: 0; font-size: 0.78rem; color: #4B5563; line-height: 1.45;">Phát hiện mã tải payload từ xa (download craddle) và điểm tiêm mã (code/command injection) — nguyên nhân dẫn đến webshell và RCE.</p>
                 </div>
             </div>
 
@@ -2530,11 +2500,11 @@ function exportReport() {
                 </table>
             </div>
 
-            <h3 style="color: #1E3A8A; font-size: 1.15rem; margin-top: 15px; margin-bottom: 8px; border-left: 4px solid #3B82F6; padding-left: 10px;">V. Khuyến nghị & Ký duyệt kiểm tra</h3>
+            <h3 style="color: #1E3A8A; font-size: 1.15rem; margin-top: 15px; margin-bottom: 8px; border-left: 4px solid #3B82F6; padding-left: 10px;">V. Khuyến nghị & Ký duyệt phân tích</h3>
             <p style="font-size: 0.85rem; color: #4B5563; line-height: 1.5; margin: 0 0 20px 0;">
-                **1. Khuyến nghị:** Quản trị viên cần nhanh chóng kích hoạt tính năng **Khắc phục Tự động** trên hệ thống để mã hóa AES-256 các tệp tin chứa dữ liệu cá nhân nhạy cảm, cách ly tệp tin chứa webshell có hậu tố '.quarantine' và thiết lập quyền hạn file về mức an toàn tối đa 'CHMOD 600'.
+                **1. Khuyến nghị:** Quản trị viên cần cách ly ngay các tệp mã độc (webshell/backdoor/RAT) bằng cách đổi đuôi '.quarantine', chặn các IoC (IP/domain C2) tại tường lửa, và chạy lại bộ YARA rules để xác nhận hệ thống đã sạch mã độc.
                 <br>
-                **2. Tuyên bố:** Báo cáo được phát hành tự động và có giá trị xác nhận tại thời điểm quét. Dữ liệu nhạy cảm hiển thị trong báo cáo này đã được áp dụng bộ lọc che thông tin để tránh rò rỉ dữ liệu thứ cấp.
+                **2. Tuyên bố:** Báo cáo được phát hành tự động và có giá trị xác nhận tại thời điểm phân tích. Các chỉ báo IoC được liệt kê để phục vụ công tác điều tra và ngăn chặn, không nhằm mục đích khai thác.
             </p>
 
             <!-- Khung ký tên kiểm định -->

@@ -1128,6 +1128,92 @@ function analyzeMalwareSync(text, fileName, fileSize, precomputedSha256) {
     };
 }
 
+// Sinh quy trình phân tích mã độc từng bước (chuẩn môn học) dựa trên kết quả thật
+function buildAnalysisSteps(ma) {
+    const steps = [];
+    const h = ma.hashes || {};
+    const ioc = ma.iocs || { ips: [], urls: [], domains: [] };
+    const pe = ma.pe_info || {};
+    const fam = ma.family || 'Unknown';
+    const ent = ma.entropy || 0;
+    const type = ma.type || 'unknown';
+
+    // Bước 1: Nhận diện loại file
+    steps.push({
+        icon: '🔍',
+        title: 'Bước 1 — Nhận diện loại file',
+        detail: `Đọc magic bytes / phần mở rộng → xác định là "${type}". Loại file quyết định cách mổ xẻ tiếp theo (PE header cho .exe, phân tích mã nguồn cho script).`
+    });
+
+    // Bước 2: Băm mã hóa
+    const hasMd5 = h.md5 ? true : false;
+    const hasSha256 = h.sha256 ? true : false;
+    steps.push({
+        icon: '🔑',
+        title: 'Bước 2 — Băm mật mã (hash)',
+        detail: hasMd5 || hasSha256
+            ? `Tính MD5/SHA-256 để có "dấu vân tay" duy nhất của mẫu${hasSha256 ? ` (SHA-256: ${String(h.sha256).slice(0,16)}…)` : ''}. Dùng hash này tra VirusTotal / MalwareBazaar để biết mẫu có bị các engine phát hiện và có thuộc chiến dịch nào không.`
+            : 'Tính hash để tra cứu danh tiếng mẫu trên VirusTotal.'
+    });
+
+    // Bước 3: Entropy
+    const entInfo = ent >= 7 ? 'cao (≥7) → nghi ngờ bị PACK/ENCRYPT (payload bị nén, cần unpack trước khi phân tích tiếp)' :
+        ent >= 5.5 ? `trung bình (${ent}) → hỗn hợp mã + dữ liệu, chưa bị pack toàn bộ` :
+        `thấp (${ent}) → nội dung chủ yếu là văn bản/mã nguồn đọc được`;
+    steps.push({
+        icon: '📊',
+        title: 'Bước 3 — Đo Entropy',
+        detail: `Entropy = ${ent}. ` + entInfo + `. Entropy cao là tín hiệu quan trọng: mã độc thường nén/mã hóa để né phân tích tĩnh.`
+    });
+
+    // Bước 4: Mổ xẻ cấu trúc
+    if (Object.keys(pe).length) {
+        // PE file
+        const parts = [];
+        if (pe.machine) parts.push(`kiến trúc ${pe.machine}`);
+        if (pe.sections_count) parts.push(`${pe.sections_count} section`);
+        if (pe.entry_point) parts.push(`entry point ${pe.entry_point}`);
+        if (pe.imports && pe.imports.length) parts.push(`${pe.imports.length} import`);
+        if (pe.suspicious_imports && pe.suspicious_imports.length) parts.push(`⚠ ${pe.suspicious_imports.length} API đáng ngờ (${pe.suspicious_imports.slice(0,4).join(', ')}…)`);
+        if (pe.packer_signs && pe.packer_signs.length) parts.push(`⚠ Packer: ${pe.packer_signs[0]}`);
+        steps.push({
+            icon: '🧬',
+            title: 'Bước 4 — Mổ xẻ PE Header',
+            detail: 'Phân tích cấu trúc PE: ' + (parts.join(', ') || 'đang đọc') + '. Nhìn Import Table để biết mã gọi API gì (CreateProcess, socket, VirtualAlloc... = hành vi đáng ngờ).'
+        });
+    } else {
+        steps.push({
+            icon: '🧬',
+            title: 'Bước 4 — Mổ xẻ mã nguồn',
+            detail: ma.evidence && ma.evidence.length
+                ? `Đọc mã nguồn, tìm lệnh nguy hiểm: ${ma.evidence.slice(0,4).map(e => e.label).join(', ')}. Đây là các điểm thực thi (sink) — nơi dữ liệu người dùng có thể bị biến thành lệnh hệ thống.`
+                : 'Đọc mã nguồn tìm lệnh thực thi (eval, system, socket...).'
+        });
+    }
+
+    // Bước 5: IoC
+    const iocCount = (ioc.ips||[]).length + (ioc.urls||[]).length + (ioc.domains||[]).length;
+    steps.push({
+        icon: '🎯',
+        title: 'Bước 5 — Trích xuất IoC',
+        detail: iocCount
+            ? `Tìm thấy ${iocCount} IoC: ${[...(ioc.ips||[]).map(x=>'IP '+x), ...(ioc.urls||[]).map(x=>'URL '+x), ...(ioc.domains||[]).map(x=>'domain '+x)].slice(0,4).join('; ')}. Đây là dấu vết máy chủ C2 — chặn tại tường lửa và điều tra tiếp.`
+            : 'Không tìm thấy IP/domain C2. Mẫu này có thể hoạt động độc lập hoặc C2 nằm trong payload đã mã hóa (cần giải mã thêm).'
+    });
+
+    // Bước 6: Kết luận
+    const isMal = (ma.threat_verdict === 'malicious') || (ma.yara_matches && ma.yara_matches.length) || fam.includes('Webshell') || fam.includes('RAT') || fam.includes('Reverse') || fam.includes('Malware') || fam.includes('Backdoor');
+    steps.push({
+        icon: isMal ? '🚨' : '✅',
+        title: 'Bước 6 — Kết luận',
+        detail: isMal
+            ? `KẾT LUẬN: Mẫu là MÃ ĐỘC, họ "${fam}". ${ma.yara_matches && ma.yara_matches.length ? `YARA khớp ${ma.yara_matches.length} rule (${ma.yara_matches.map(m=>m.rule).join(', ')}).` : ''} Cần cách ly, chặn IoC và truy vết bằng MITRE ATT&CK.`
+            : `KẾT LUẬN: Chưa đủ dấu hiệu mã độc rõ ràng — phân loại "${fam}". Cần phân tích động (chạy trong sandbox) để xác nhận hành vi thật.`
+    });
+
+    return steps;
+}
+
 // Chuyển kết quả backend (FastAPI) thành định dạng malwareAnalysis cho frontend
 function backendResultToMalwareAnalysis(br) {
     if (!br) return null;
@@ -1757,6 +1843,24 @@ function populateMalwareTab() {
                         </div>`).join('')}
                     </div>
                 </div>` : ''}
+
+                ${(() => {
+                    const steps = buildAnalysisSteps(ma);
+                    return steps.length ? `
+                <div style="margin-top:14px; padding:12px; background:rgba(16,185,129,0.04); border:1px solid rgba(16,185,129,0.18); border-radius:6px;">
+                    <div style="font-weight:700; color:#10B981; font-size:0.8rem; margin-bottom:8px;">🔬 Quy trình phân tích mã độc (mổ xẻ từng bước)</div>
+                    <div style="display:flex; flex-direction:column; gap:7px;">
+                        ${steps.map(s => `
+                        <div style="display:flex; gap:8px; font-size:0.74rem; line-height:1.5;">
+                            <span style="font-size:1rem; flex-shrink:0; width:22px; text-align:center;">${s.icon}</span>
+                            <div>
+                                <div style="font-weight:700; color:var(--text-primary);">${s.title}</div>
+                                <div style="color:var(--text-secondary);">${s.detail}</div>
+                            </div>
+                        </div>`).join('')}
+                    </div>
+                </div>` : '';
+                })()}
             </div>`;
     });
 

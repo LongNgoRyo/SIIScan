@@ -34,6 +34,56 @@ pip install -r requirements.txt
 python3 piiscan.py --path /duong/dan/can/quét --output-html report.html --output-csv report.csv
 ```
 
+## 🚀 Backend API (FastAPI) — phân tích động
+
+Frontend hiện có 2 chế độ:
+1. **Client-side** (GitHub Pages, tĩnh): hash SHA-256 + entropy + IoC + phân loại họ (chạy ngay trong trình duyệt)
+2. **Backend API** (động): đầy đủ MD5/SHA1/SHA256/SHA512 + pefile (PE header) + YARA rules + entropy
+
+### Chạy backend local
+
+```bash
+pip install fastapi uvicorn python-multipart
+python3 api_server.py
+# hoặc: uvicorn api_server:app --host 0.0.0.0 --port 8000
+```
+
+- Tài liệu API: http://localhost:8000/docs
+- Health check: http://localhost:8000/api/health
+
+### Cấu hình frontend gọi backend
+
+Trong `app.js`, đổi `const API_BASE_URL = ""` thành URL backend đã deploy:
+
+```js
+const API_BASE_URL = "https://ten-backend-cua-ban.onrender.com";
+```
+
+### Triển khai backend lên nền tảng (host động)
+
+| Nền tảng | Hỗ trợ | Ghi chú |
+|---|---|---|
+| **Render** (free) | ✅ | Python + Aptfile (cài libyara-dev). Free tier "sleep" sau 15 phút không dùng |
+| **Railway** | ✅ | Python + buildpack, có free trial |
+| **PythonAnywhere** | ⚠️ | Chạy Flask/FastAPI, nhưng yara-python khó cài |
+| **Heroku** | ⚠️ | Trả phí từ 2022 |
+
+**Render** (khuyến nghị) — các file đã chuẩn bị sẵn:
+- `Procfile` — lệnh chạy
+- `render.yaml` — cấu hình dịch vụ
+- `Aptfile` — cài `libyara-dev` + `build-essential` để build yara-python
+
+Cách deploy lên Render:
+1. Push repo lên GitHub (đã có sẵn)
+2. Vào https://render.com → New → Web Service → Connect GitHub repo
+3. Chọn nhánh `main`, Runtime = Python
+4. Render tự đọc `render.yaml` hoặc cấu hình thủ công:
+   - Build: `pip install -r requirements.txt`
+   - Start: `uvicorn api_server:app --host 0.0.0.0 --port $PORT`
+5. Deploy xong, copy URL (dạng `https://xxx.onrender.com`) vào `API_BASE_URL` trong `app.js` và push lại
+
+> ⚠️ Nếu host không cài được yara-python (thiếu trình biên dịch), code vẫn chạy — chỉ bỏ qua phần YARA match (còn pefile, hash, entropy, IoC vẫn đầy đủ).
+
 ## Bộ test dataset
 
 ```bash

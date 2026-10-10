@@ -97,6 +97,44 @@ def scan_file(file_path):
     return result
 
 
+def scan_bytes(data):
+    """
+    Quét dữ liệu bytes trực tiếp bằng YARA rules (dùng cho API nhận file upload).
+    Trả về list các rule khớp tương tự scan_file.
+    """
+    if not _HAS_YARA:
+        return []
+
+    rules = load_rules()
+    if rules is None:
+        return []
+
+    if isinstance(data, str):
+        data = data.encode("utf-8", errors="ignore")
+
+    try:
+        matches = rules.match(data=data, timeout=60)
+    except yara.TimeoutError:
+        return [{"rule": "(timeout)", "meta": {}, "strings": []}]
+    except Exception:
+        return []
+
+    result = []
+    for m in matches:
+        result.append({
+            "rule": m.rule,
+            "namespace": m.namespace,
+            "tags": list(m.tags),
+            "meta": dict(m.meta) if m.meta else {},
+            "strings": [{
+                "identifier": s.identifier,
+                "offset": s.instances[0].offset if s.instances else 0,
+                "data": _safe_bytes(s.instances[0].matched_data) if s.instances else "",
+            } for s in m.strings],
+        })
+    return result
+
+
 def _safe_bytes(b):
     """Chuyển bytes an toàn sang str (dùng cho hiển thị)."""
     if isinstance(b, (bytes, bytearray)):

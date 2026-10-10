@@ -4,4 +4,7 @@ PyPDF2
 python-docx
 openpyxl
 pefile
+fastapi
+uvicorn[standard]
+python-multipart
 yara-python

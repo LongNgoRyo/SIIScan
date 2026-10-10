@@ -222,16 +222,30 @@ let currentTargetIsFolder = false;
 let isRemediated = false; // Check if recommendations have been run
 
 // Tự động xác định địa chỉ API
+// ===== CẤU HÌNH BACKEND API =====
+// Đổi URL này thành địa chỉ backend đã deploy (Render/Railway/Heroku).
+// Khi để trống, hệ thống tự phát hiện: localhost thì gọi backend local, còn không thì dùng phân tích client-side.
+const API_BASE_URL = "";
+
 const getApiUrl = (endpoint) => {
-    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    if (window.location.protocol === 'file:' || (isLocalhost && window.location.port !== '5000' && window.location.port !== '')) {
-        return `http://localhost:5000${endpoint}`;
+    // 1. Nếu có URL backend cấu hình sẵn thì dùng nó (host động: Render/Railway/Heroku)
+    if (API_BASE_URL) {
+        return `${API_BASE_URL}${endpoint}`;
     }
+    // 2. Nếu chạy local (file:// hoặc localhost) thì gọi backend local Python
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (window.location.protocol === 'file:' || isLocalhost) {
+        // Thử port 8000 (FastAPI mới) trước, fallback 5000
+        return `http://localhost:8000${endpoint}`;
+    }
+    // 3. Mặc định: trả endpoint tương đối (GitHub Pages sẽ fallback phân tích client-side)
     return endpoint;
 };
 
-// Kiểm tra có nên gọi backend local Python hay không (chỉ gọi khi mở local/file)
+// Kiểm tra có nên gọi backend hay không
 const isBackendReachable = () => {
+    // Nếu cấu hình URL backend rõ ràng thì luôn thử gọi
+    if (API_BASE_URL) return true;
     const h = window.location.hostname;
     return (h === '' || h === 'localhost' || h === '127.0.0.1');
 };
@@ -430,11 +444,37 @@ async function startLoading(targetName, filesArrayOrCount) {
                 sha256 = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
             } catch (e) { sha256 = ''; }
 
+            // ===== THỬ GỌI BACKEND API (FastAPI) để phân tích sâu hơn =====
+            let backendResult = null;
+            if (isBackendReachable()) {
+                try {
+                    const fd = new FormData();
+                    fd.append('file', file, file.name);
+                    const controller = new AbortController();
+                    const to = setTimeout(() => controller.abort(), 8000);
+                    const resp = await fetch(getApiUrl('/api/analyze'), {
+                        method: 'POST',
+                        body: fd,
+                        signal: controller.signal
+                    });
+                    clearTimeout(to);
+                    if (resp.ok) {
+                        const j = await resp.json();
+                        if (j && j.success && j.result) {
+                            backendResult = j.result;
+                        }
+                    }
+                } catch (e) {
+                    console.warn("Backend API khong the gọi:", e.message);
+                }
+            }
+
             scannedData.push({
                 file: file,
                 findings: findings,
                 text: fileText,
-                sha256: sha256
+                sha256: sha256,
+                backendResult: backendResult
             });
             await new Promise(r => setTimeout(r, 40)); // Small delay for smooth UI
         }
@@ -1088,6 +1128,30 @@ function analyzeMalwareSync(text, fileName, fileSize, precomputedSha256) {
     };
 }
 
+// Chuyển kết quả backend (FastAPI) thành định dạng malwareAnalysis cho frontend
+function backendResultToMalwareAnalysis(br) {
+    if (!br) return null;
+    return {
+        family: br.family || 'Unknown',
+        type: br.type || 'unknown',
+        entropy: (br.entropy !== undefined ? br.entropy : 0),
+        entropy_verdict: br.entropyVerdict || '',
+        hashes: br.hashes || {},
+        fuzzy_hash: br.fuzzyHash || '',
+        iocs: br.iocs || { ips: [], urls: [], domains: [] },
+        pe_info: br.peInfo || {},
+        evidence: (br.yaraMatches || []).map(y => ({
+            label: y.rule,
+            why: (y.meta && y.meta.description) || `YARA rule "${y.rule}" khớp (severity: ${y.meta && y.meta.severity || 'N/A'})`
+        })),
+        decoded_payloads: [],
+        attack_chain: [],
+        file_size: br.fileSize || 0,
+        threat_verdict: br.threatVerdict || 'safe',
+        yara_matches: br.yaraMatches || []
+    };
+}
+
 // Xử lý kết quả quét & Tính toán số liệu thống kê
 function processScanResults(targetName, filesArrayOrCount, realData) {
     scanResults = [];
@@ -1177,6 +1241,7 @@ function processScanResults(targetName, filesArrayOrCount, realData) {
                 return f;
             });
 
+            const maBackend = item.backendResult ? backendResultToMalwareAnalysis(item.backendResult) : null;
             scanResults.push({
                 fileName: item.file.name,
                 path: item.file.webkitRelativePath || item.file.name,
@@ -1194,7 +1259,7 @@ function processScanResults(targetName, filesArrayOrCount, realData) {
                 entropy: 0,
                 entropyRisk: 'none',
                 riskRating: null,
-                malwareAnalysis: analyzeMalwareSync(item.text || '', item.file.name, item.file.size, item.sha256 || '')
+                malwareAnalysis: maBackend || analyzeMalwareSync(item.text || '', item.file.name, item.file.size, item.sha256 || '')
             });
         });
     } else {

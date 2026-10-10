@@ -225,7 +225,7 @@ let isRemediated = false; // Check if recommendations have been run
 // ===== CẤU HÌNH BACKEND API =====
 // Đổi URL này thành địa chỉ backend đã deploy (Render/Railway/Heroku).
 // Khi để trống, hệ thống tự phát hiện: localhost thì gọi backend local, còn không thì dùng phân tích client-side.
-const API_BASE_URL = "";
+const API_BASE_URL = "https://siiscan-9m5z.onrender.com";
 
 const getApiUrl = (endpoint) => {
     // 1. Nếu có URL backend cấu hình sẵn thì dùng nó (host động: Render/Railway/Heroku)

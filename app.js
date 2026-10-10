@@ -2918,27 +2918,46 @@ function exportReport() {
         });
     });
 
-    // ===== Bảng phân tích mã độc tĩnh (hash/entropy/family/IoC) cho PDF =====
+    // ===== Bảng phân tích mã độc tĩnh đầy đủ (hash/entropy/family/IoC/quy trình) cho PDF =====
     let malwareAnalysisHtml = '';
     scanResults.filter(r => r.malwareAnalysis).forEach(res => {
         const ma = res.malwareAnalysis;
         const h = ma.hashes || {};
         const ioc = ma.iocs || { ips: [], urls: [], domains: [] };
-        const iocList = [...ioc.ips, ...ioc.urls, ...ioc.domains].join(', ') || 'Không phát hiện';
+        const iocList = [...(ioc.ips||[]), ...(ioc.urls||[]), ...(ioc.domains||[])].join(', ') || 'Không phát hiện';
+        const steps = buildAnalysisSteps(ma);
+        const evHtml = (ma.evidence && ma.evidence.length) ? ma.evidence.map(ev => `<div style="color:#7F1D1D; margin-top:3px;">&bull; <b>${ev.label}</b> — ${ev.why}</div>`).join('') : '';
+        const decHtml = (ma.decoded_payloads && ma.decoded_payloads.length) ? ma.decoded_payloads.map(dp => `<div style="color:#065F46; margin-top:3px; font-family:monospace;">&bull; ${dp.type} → <b>${dp.decoded}</b></div>`).join('') : '';
+        const chainHtml = (ma.attack_chain && ma.attack_chain.length) ? ma.attack_chain.map(s => `<div style="color:#5B21B6; margin-top:3px;">▸ ${s}</div>`).join('') : '';
+        const stepsHtml = steps.map(s => `<div style="margin-top:5px;"><b>${s.title}</b> — ${s.detail}</div>`).join('');
+
         malwareAnalysisHtml += `
-            <div style="margin-bottom: 12px; padding: 12px; border: 1px solid #E5E7EB; border-left: 4px solid #F59E0B; border-radius: 6px; break-inside: avoid;">
-                <div style="font-weight: 700; font-size: 0.85rem; color: #111827;">📄 ${res.relativePath || res.fileName}</div>
-                <div style="margin-top: 4px; display:flex; flex-wrap:wrap; gap:8px; font-size: 0.72rem;">
-                    <span style="background:#FEE2E2; color:#991B1B; padding:2px 8px; border-radius:4px; font-weight:700;">${ma.family}</span>
+            <div style="margin-bottom: 14px; padding: 14px; border: 1px solid #E5E7EB; border-left: 4px solid #F59E0B; border-radius: 6px; break-inside: avoid; page-break-inside: avoid;">
+                <div style="font-weight: 800; font-size: 0.95rem; color: #111827;">📄 ${res.relativePath || res.fileName}</div>
+                <div style="margin-top: 5px; display:flex; flex-wrap:wrap; gap:8px; font-size: 0.82rem;">
+                    <span style="background:#FEE2E2; color:#991B1B; padding:2px 10px; border-radius:4px; font-weight:700;">🦠 ${ma.family}</span>
                     <span style="color:#6B7280; font-family:monospace;">${ma.type}</span>
                     <span style="color:#6B7280; font-family:monospace;">Entropy: ${ma.entropy}</span>
                 </div>
-                <div style="margin-top:6px; font-size:0.68rem; font-family:monospace; color:#4B5563; word-break:break-all;">
-                    MD5: ${h.md5 || '—'}<br>
-                    SHA256: ${h.sha256 || '—'}
+
+                <div style="margin-top:8px; font-size:0.78rem; font-family:monospace; color:#4B5563; word-break:break-all; line-height:1.6;">
+                    <b>MD5:</b> ${h.md5 || '—'} &nbsp;|&nbsp; <b>SHA-1:</b> ${h.sha1 || '—'}<br>
+                    <b>SHA-256:</b> ${h.sha256 || '—'}<br>
+                    <b>SHA-512:</b> ${h.sha512 || '—'}
                 </div>
-                ${ma.pe_info && Object.keys(ma.pe_info).length ? `<div style="margin-top:4px; font-size:0.68rem; color:#1E40AF;">PE: ${ma.pe_info.machine || ''}${ma.pe_info.packer_signs && ma.pe_info.packer_signs.length ? ' ⚠ ' + ma.pe_info.packer_signs[0] : ''}</div>` : ''}
-                <div style="margin-top:4px; font-size:0.68rem; color:#92400E;">IoC: ${iocList}</div>
+
+                ${ma.pe_info && Object.keys(ma.pe_info).length ? `<div style="margin-top:6px; font-size:0.78rem; color:#1E40AF;"><b>PE Header:</b> ${ma.pe_info.machine || ''} · ${ma.pe_info.sections_count ? ma.pe_info.sections_count + ' section' : ''} · EP ${ma.pe_info.entry_point || '—'}${ma.pe_info.packer_signs && ma.pe_info.packer_signs.length ? ' · ⚠ Packer: ' + ma.pe_info.packer_signs[0] : ''}</div>` : ''}
+
+                <div style="margin-top:4px; font-size:0.78rem; color:#92400E;"><b>IoC:</b> ${iocList}</div>
+
+                ${evHtml ? `<div style="margin-top:6px; padding-top:6px; border-top:1px dashed #E5E7EB;"><div style="font-weight:700; color:#B91C1C; font-size:0.8rem;">🧪 Bằng chứng phát hiện:</div>${evHtml}</div>` : ''}
+                ${decHtml ? `<div style="margin-top:6px; padding-top:6px; border-top:1px dashed #E5E7EB;"><div style="font-weight:700; color:#047857; font-size:0.8rem;">🔓 Giải mã payload ẩn:</div>${decHtml}</div>` : ''}
+                ${chainHtml ? `<div style="margin-top:6px; padding-top:6px; border-top:1px dashed #E5E7EB;"><div style="font-weight:700; color:#6D28D9; font-size:0.8rem;">⚔️ Luồng tấn công:</div>${chainHtml}</div>` : ''}
+
+                <div style="margin-top:8px; padding:8px 10px; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:5px;">
+                    <div style="font-weight:800; color:#047857; font-size:0.82rem;">🔬 Quy trình phân tích (mổ xẻ từng bước):</div>
+                    <div style="font-size:0.8rem; color:#1F2937; line-height:1.55;">${stepsHtml}</div>
+                </div>
             </div>`;
     });
 

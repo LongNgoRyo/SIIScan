@@ -1214,6 +1214,85 @@ function buildAnalysisSteps(ma) {
     return steps;
 }
 
+// Sinh sơ đồ minh họa (SVG) cho quy trình phân tích — trực quan hóa từng bước
+function buildAnalysisDiagram(ma) {
+    const pe = ma.pe_info || {};
+    const isPE = Object.keys(pe).length > 0;
+    const entropy = ma.entropy || 0;
+    const entColor = entropy >= 7 ? '#EF4444' : entropy >= 5.5 ? '#F59E0B' : '#10B981';
+    const family = ma.family || 'Unknown';
+    const isMal = (ma.threat_verdict === 'malicious') || (ma.yara_matches && ma.yara_matches.length) || family.includes('Webshell') || family.includes('RAT') || family.includes('Reverse') || family.includes('Malware') || family.includes('Backdoor');
+
+    if (isPE) {
+        // Sơ đồ cấu trúc PE header
+        const sections = (pe.sections || []).slice(0, 4);
+        const secHtml = sections.map((s, i) => {
+            const e = s.entropy || 0;
+            const c = e >= 7 ? '#EF4444' : e >= 6 ? '#F59E0B' : '#60A5FA';
+            return `<rect x="${20 + i * 70}" y="150" width="60" height="60" rx="4" fill="${c}22" stroke="${c}" stroke-width="1.5"/>
+                    <text x="${50 + i * 70}" y="176" text-anchor="middle" font-size="11" fill="${c}" font-weight="bold">${s.name}</text>
+                    <text x="${50 + i * 70}" y="192" text-anchor="middle" font-size="9" fill="#9CA3AF">ent ${e.toFixed(2)}</text>`;
+        }).join('');
+        const importHint = (pe.suspicious_imports && pe.suspicious_imports.length) ? `⚠ ${pe.suspicious_imports.length} API đáng ngờ` : 'Không có import đáng ngờ';
+        return `
+        <div style="margin-bottom:8px;">
+            <div style="font-size:0.82rem; color:var(--text-secondary); margin-bottom:4px;">📐 Sơ đồ cấu trúc PE Header — ${pe.machine || ''} · ${pe.sections_count || 0} section</div>
+            <svg viewBox="0 0 320 235" style="width:100%; max-width:520px; height:auto; background:#0f172a; border-radius:6px; border:1px solid #1f2937;">
+                <rect x="20" y="10" width="280" height="28" rx="4" fill="#1e40af" stroke="#3b82f6"/>
+                <text x="160" y="29" text-anchor="middle" font-size="11" fill="#e5e7eb" font-weight="bold">DOS Header (MZ) + PE Signature</text>
+                <rect x="20" y="48" width="280" height="28" rx="4" fill="#1e3a8a" stroke="#3b82f6"/>
+                <text x="160" y="67" text-anchor="middle" font-size="11" fill="#e5e7eb">File Header · Optional Header</text>
+                <rect x="20" y="86" width="280" height="48" rx="4" fill="#312e81" stroke="#6366f1"/>
+                <text x="160" y="103" text-anchor="middle" font-size="10" fill="#c7d2fe">Import Table</text>
+                <text x="160" y="120" text-anchor="middle" font-size="9" fill="#fca5a5">${importHint}</text>
+                ${secHtml}
+                <text x="160" y="228" text-anchor="middle" font-size="9" fill="#6b7280">EP: ${pe.entry_point || '—'} · Packer: ${(pe.packer_signs && pe.packer_signs.length) ? pe.packer_signs[0] : 'không'}</text>
+            </svg>
+        </div>`;
+    } else {
+        // Sơ đồ luồng tấn công (cho script/webshell)
+        const chainLabels = [];
+        if (family.includes('Obfuscated') || family.includes('base64') || family.includes('GZip')) chainLabels.push('Giải mã payload');
+        if (family.includes('Webshell') || family.includes('Backdoor')) chainLabels.push('Thực thi lệnh (RCE)');
+        if (family.includes('RAT') || family.includes('Reverse')) chainLabels.push('Kết nối C2');
+        if (family.includes('Malware') || family.includes('fileless')) chainLabels.push('Tải & chạy payload');
+        if (!chainLabels.length) chainLabels.push('Đọc mã nguồn', 'Tìm lệnh sink');
+
+        const boxes = chainLabels.map((lbl, i) => {
+            const x = 20, w = 280, y = 30 + i * 55;
+            const c = i === chainLabels.length - 1 ? '#EF4444' : '#3b82f6';
+            return `<polygon points="${x + w/2},${y} ${x + w},${y + 18} ${x + w/2},${y + 36} ${x},${y + 18}" fill="${c}22" stroke="${c}" stroke-width="1.5"/>
+                    <text x="${x + w/2}" y="${y + 21}" text-anchor="middle" font-size="10" fill="#e5e7eb" font-weight="bold">${lbl}</text>
+                    ${i < chainLabels.length - 1 ? `<text x="${x + w/2}" y="${y + 46}" text-anchor="middle" font-size="12" fill="#6b7280">↓</text>` : ''}`;
+        }).join('');
+
+        // entropy gauge
+        const entWidth = Math.min(100, (entropy / 8) * 100);
+        return `
+        <div style="margin-bottom:8px;">
+            <div style="font-size:0.82rem; color:var(--text-secondary); margin-bottom:4px;">📐 Sơ đồ luồng phân tích — họ "${family}"</div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <div style="flex:1; min-width:220px;">
+                    <svg viewBox="0 0 320 ${30 + chainLabels.length * 55}" style="width:100%; max-width:360px; height:auto; background:#0f172a; border-radius:6px; border:1px solid #1f2937;">
+                        ${boxes}
+                    </svg>
+                </div>
+                <div style="flex:1; min-width:200px; background:#0f172a; border:1px solid #1f2937; border-radius:6px; padding:12px;">
+                    <div style="font-size:0.8rem; color:#e5e7eb; font-weight:700; margin-bottom:6px;">Thang Entropy</div>
+                    <div style="height:14px; background:#1f2937; border-radius:99px; overflow:hidden; position:relative;">
+                        <div style="height:100%; width:${entWidth}%; background:${entColor}; border-radius:99px;"></div>
+                    </div>
+                    <div style="font-size:0.78rem; color:${entColor}; font-weight:700; margin-top:4px;">${entropy} / 8</div>
+                    <div style="font-size:0.72rem; color:#9ca3af; margin-top:2px;">${entropy >= 7 ? '⚠ Cao — nghi packed' : entropy >= 5.5 ? 'Trung bình' : 'Thấp — mã đọc được'}</div>
+                    <div style="margin-top:8px; padding-top:8px; border-top:1px solid #1f2937; font-size:0.78rem;">
+                        <span style="color:${isMal ? '#EF4444' : '#10B981'}; font-weight:700;">${isMal ? '🚨 MÃ ĐỘC' : '✅ KHÔNG RÕ MÃ ĐỘC'}</span>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    }
+}
+
 // Chuyển kết quả backend (FastAPI) thành định dạng malwareAnalysis cho frontend
 function backendResultToMalwareAnalysis(br) {
     if (!br) return null;
@@ -1777,19 +1856,19 @@ function populateMalwareTab() {
                             <span style="font-weight:700; font-size:1rem; color:var(--text-primary);">${res.relativePath || res.fileName}</span>
                         </div>
                         <div style="margin-top:6px; display:flex; flex-wrap:wrap; gap:6px;">
-                            <span style="display:inline-flex; align-items:center; gap:4px; background:rgba(239,68,68,0.13); color:${familyColor}; border:1px solid rgba(239,68,68,0.3); padding:2px 10px; border-radius:4px; font-size:0.72rem; font-weight:700;">${ma.family}</span>
-                            <span style="font-size:0.7rem; color:var(--text-muted); font-family:var(--font-mono); padding:2px 6px; border:1px solid var(--border-color); border-radius:4px;">${ma.type}</span>
-                            <span style="font-size:0.7rem; color:var(--text-muted); font-family:var(--font-mono); padding:2px 6px; border:1px solid var(--border-color); border-radius:4px;">${(ma.file_size/1024).toFixed(1)} KB</span>
+                            <span style="display:inline-flex; align-items:center; gap:4px; background:rgba(239,68,68,0.13); color:${familyColor}; border:1px solid rgba(239,68,68,0.3); padding:3px 12px; border-radius:4px; font-size:0.9rem; font-weight:700;">${ma.family}</span>
+                            <span style="font-size:0.85rem; color:var(--text-muted); font-family:var(--font-mono); padding:3px 8px; border:1px solid var(--border-color); border-radius:4px;">${ma.type}</span>
+                            <span style="font-size:0.85rem; color:var(--text-muted); font-family:var(--font-mono); padding:3px 8px; border:1px solid var(--border-color); border-radius:4px;">${(ma.file_size/1024).toFixed(1)} KB</span>
                         </div>
                     </div>
                     <div style="text-align:right;">
-                        <div style="font-size:0.7rem; color:var(--text-muted);">Entropy</div>
-                        <div style="font-size:1.4rem; font-weight:800; font-family:var(--font-mono); color:${ma.entropy >= 7 ? '#F87171' : ma.entropy >= 6 ? '#F59E0B' : '#10B981'};">${ma.entropy}</div>
-                        <div style="font-size:0.65rem; color:var(--text-muted); max-width:160px;">${ma.entropy_verdict}</div>
+                        <div style="font-size:0.85rem; color:var(--text-muted);">Entropy</div>
+                        <div style="font-size:1.6rem; font-weight:800; font-family:var(--font-mono); color:${ma.entropy >= 7 ? '#F87171' : ma.entropy >= 6 ? '#F59E0B' : '#10B981'};">${ma.entropy}</div>
+                        <div style="font-size:0.78rem; color:var(--text-muted); max-width:180px;">${ma.entropy_verdict}</div>
                     </div>
                 </div>
 
-                <div style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:0.7rem; font-family:var(--font-mono);">
+                <div style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:0.82rem; font-family:var(--font-mono);">
                     <div><span style="color:var(--text-muted);">MD5:</span> <code style="color:var(--text-primary);" title="${h.md5}">${h.md5 || '—'}</code></div>
                     <div><span style="color:var(--text-muted);">SHA-1:</span> <code style="color:var(--text-primary);" title="${h.sha1}">${h.sha1 || '—'}</code></div>
                     <div><span style="color:var(--text-muted);">SHA-256:</span> <code style="color:var(--text-primary);" title="${h.sha256}">${h.sha256 || '—'}</code></div>
@@ -1800,10 +1879,10 @@ function populateMalwareTab() {
 
                 ${ma.evidence && ma.evidence.length ? `
                 <div style="margin-top:12px;">
-                    <div style="font-weight:600; color:#EF4444; font-size:0.78rem; margin-bottom:6px;">🧪 Bằng chứng phát hiện (vì sao bị nhận diện)</div>
+                    <div style="font-weight:600; color:#EF4444; font-size:0.92rem; margin-bottom:6px;">🧪 Bằng chứng phát hiện (vì sao bị nhận diện)</div>
                     <div style="display:flex; flex-direction:column; gap:5px;">
                         ${ma.evidence.map(ev => `
-                        <div style="display:flex; align-items:flex-start; gap:8px; padding:6px 10px; background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.15); border-radius:5px; font-size:0.72rem;">
+                        <div style="display:flex; align-items:flex-start; gap:8px; padding:7px 12px; background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.15); border-radius:5px; font-size:0.88rem;">
                             <code style="color:#F87171; font-family:var(--font-mono); font-weight:700; white-space:nowrap;">${ev.label}</code>
                             <span style="color:var(--text-secondary); line-height:1.4;">${ev.why}</span>
                         </div>`).join('')}
@@ -1812,10 +1891,10 @@ function populateMalwareTab() {
 
                 ${ma.decoded_payloads && ma.decoded_payloads.length ? `
                 <div style="margin-top:12px;">
-                    <div style="font-weight:600; color:#60A5FA; font-size:0.78rem; margin-bottom:6px;">🔓 Giải mã Payload ẩn (nội dung thật bị giấu)</div>
+                    <div style="font-weight:600; color:#60A5FA; font-size:0.92rem; margin-bottom:6px;">🔓 Giải mã Payload ẩn (nội dung thật bị giấu)</div>
                     <div style="display:flex; flex-direction:column; gap:6px;">
                         ${ma.decoded_payloads.map(dp => `
-                        <div style="padding:8px 10px; background:rgba(96,165,250,0.06); border:1px solid rgba(96,165,250,0.18); border-radius:5px; font-size:0.72rem;">
+                        <div style="padding:9px 12px; background:rgba(96,165,250,0.06); border:1px solid rgba(96,165,250,0.18); border-radius:5px; font-size:0.88rem;">
                             <div style="color:var(--text-muted); margin-bottom:4px;">
                                 <span style="font-weight:700; color:#60A5FA;">${dp.type}:</span>
                                 <code style="font-family:var(--font-mono); word-break:break-all; color:var(--text-muted);">${dp.raw}</code>
@@ -1828,16 +1907,16 @@ function populateMalwareTab() {
                 </div>` : ''}
 
                 <div style="margin-top:12px;">
-                    <div style="font-weight:600; color:#F59E0B; font-size:0.78rem; margin-bottom:6px;">🎯 IoCs (Indicators of Compromise)</div>
+                    <div style="font-weight:600; color:#F59E0B; font-size:0.92rem; margin-bottom:6px;">🎯 IoCs (Indicators of Compromise)</div>
                     <div style="display:flex; flex-direction:column; gap:6px;">${iocHtml}</div>
                 </div>
 
                 ${ma.attack_chain && ma.attack_chain.length ? `
                 <div style="margin-top:12px;">
-                    <div style="font-weight:600; color:#8B5CF6; font-size:0.78rem; margin-bottom:6px;">⚔️ Luồng tấn công (cách mã độc hoạt động)</div>
+                    <div style="font-weight:600; color:#8B5CF6; font-size:0.92rem; margin-bottom:6px;">⚔️ Luồng tấn công (cách mã độc hoạt động)</div>
                     <div style="display:flex; flex-direction:column; gap:5px;">
                         ${ma.attack_chain.map(step => `
-                        <div style="display:flex; align-items:flex-start; gap:8px; padding:6px 10px; background:rgba(139,92,246,0.07); border:1px solid rgba(139,92,246,0.2); border-radius:5px; font-size:0.74rem; color:var(--text-secondary); line-height:1.45;">
+                        <div style="display:flex; align-items:flex-start; gap:8px; padding:7px 12px; background:rgba(139,92,246,0.07); border:1px solid rgba(139,92,246,0.2); border-radius:5px; font-size:0.88rem; color:var(--text-secondary); line-height:1.5;">
                             <span style="color:#8B5CF6; font-weight:700; flex-shrink:0;">▸</span>
                             <span>${step}</span>
                         </div>`).join('')}
@@ -1846,15 +1925,19 @@ function populateMalwareTab() {
 
                 ${(() => {
                     const steps = buildAnalysisSteps(ma);
+                    const diagram = buildAnalysisDiagram(ma);
                     return steps.length ? `
-                <div style="margin-top:14px; padding:12px; background:rgba(16,185,129,0.04); border:1px solid rgba(16,185,129,0.18); border-radius:6px;">
-                    <div style="font-weight:700; color:#10B981; font-size:0.8rem; margin-bottom:8px;">🔬 Quy trình phân tích mã độc (mổ xẻ từng bước)</div>
-                    <div style="display:flex; flex-direction:column; gap:7px;">
+                <div style="margin-top:14px; padding:16px; background:rgba(16,185,129,0.05); border:1px solid rgba(16,185,129,0.22); border-radius:8px;">
+                    <div style="font-weight:700; color:#10B981; font-size:1rem; margin-bottom:10px;">🔬 Quy trình phân tích mã độc (mổ xẻ từng bước)</div>
+
+                    ${diagram}
+
+                    <div style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
                         ${steps.map(s => `
-                        <div style="display:flex; gap:8px; font-size:0.74rem; line-height:1.5;">
-                            <span style="font-size:1rem; flex-shrink:0; width:22px; text-align:center;">${s.icon}</span>
+                        <div style="display:flex; gap:10px; font-size:0.92rem; line-height:1.55;">
+                            <span style="font-size:1.15rem; flex-shrink:0; width:26px; text-align:center;">${s.icon}</span>
                             <div>
-                                <div style="font-weight:700; color:var(--text-primary);">${s.title}</div>
+                                <div style="font-weight:700; color:var(--text-primary); font-size:0.95rem;">${s.title}</div>
                                 <div style="color:var(--text-secondary);">${s.detail}</div>
                             </div>
                         </div>`).join('')}

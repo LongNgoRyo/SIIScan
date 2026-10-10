@@ -7,4 +7,3 @@ pefile
 fastapi
 uvicorn[standard]
 python-multipart
-yara-python

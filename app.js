@@ -1250,43 +1250,63 @@ function buildAnalysisDiagram(ma) {
             </svg>
         </div>`;
     } else {
-        // Sơ đồ luồng tấn công (cho script/webshell)
-        const chainLabels = [];
-        if (family.includes('Obfuscated') || family.includes('base64') || family.includes('GZip')) chainLabels.push('Giải mã payload');
-        if (family.includes('Webshell') || family.includes('Backdoor')) chainLabels.push('Thực thi lệnh (RCE)');
-        if (family.includes('RAT') || family.includes('Reverse')) chainLabels.push('Kết nối C2');
-        if (family.includes('Malware') || family.includes('fileless')) chainLabels.push('Tải & chạy payload');
-        if (!chainLabels.length) chainLabels.push('Đọc mã nguồn', 'Tìm lệnh sink');
+        // ===== SƠ ĐỒ LUỒNG TẤN CÔNG (kill chain) — đầy đủ 5 giai đoạn =====
+        const has = (s) => ma.attack_chain ? ma.attack_chain.some(x => x.includes(s)) : false;
+        const isObf = family.includes('Obfuscated') || family.includes('base64') || family.includes('GZip') || family.includes('hex');
+        const isRevs = family.includes('Reverse') || family.includes('RAT');
 
-        const boxes = chainLabels.map((lbl, i) => {
-            const x = 20, w = 280, y = 30 + i * 55;
-            const c = i === chainLabels.length - 1 ? '#EF4444' : '#3b82f6';
-            return `<polygon points="${x + w/2},${y} ${x + w},${y + 18} ${x + w/2},${y + 36} ${x},${y + 18}" fill="${c}22" stroke="${c}" stroke-width="1.5"/>
-                    <text x="${x + w/2}" y="${y + 21}" text-anchor="middle" font-size="10" fill="#e5e7eb" font-weight="bold">${lbl}</text>
-                    ${i < chainLabels.length - 1 ? `<text x="${x + w/2}" y="${y + 46}" text-anchor="middle" font-size="12" fill="#6b7280">↓</text>` : ''}`;
+        // 5 giai đoạn tấn công chuẩn (theo MITRE ATT&CK)
+        const stages = [
+            { icon: '🧑‍💻', label: '1. Kẻ tấn công', detail: 'Gửi lệnh qua HTTP (POST/GET)', color: '#64748b', active: true },
+            { icon: '📥', label: '2. Server nhận input', detail: '$_POST / $_GET / $_REQUEST', color: '#3b82f6', active: true },
+            { icon: '🔓', label: '3. Giải mã / xử lý', detail: isObf ? 'base64_decode / hex2bin / gzinflate' : 'Không obfuscation — input dùng trực tiếp', color: isObf ? '#f59e0b' : '#64748b', active: isObf },
+            { icon: '💥', label: '4. Thực thi lệnh', detail: 'eval / system / shell_exec (RCE)', color: '#ef4444', active: true },
+            { icon: isRevs ? '🌐' : '👑', label: isRevs ? '5. Kết nối C2' : '5. Chiếm quyền server', detail: isRevs ? 'Reverse shell về máy hacker' : 'Điều khiển từ xa, cài backdoor', color: '#a855f7', active: true },
+        ];
+
+        // Vẽ từng stage thành khối ngang + mũi tên nối
+        const rowHeight = 64;
+        const boxW = 440, boxH = 48;
+        const startY = 20;
+        const leftW = 420; // vùng dành cho khối
+        const svgH = startY + stages.length * rowHeight + 10;
+        const boxes = stages.map((st, i) => {
+            const y = startY + i * rowHeight;
+            const c = st.active ? st.color : '#334155';
+            const opacity = st.active ? 1 : 0.45;
+            return `<rect x="8" y="${y}" width="${boxW}" height="${boxH}" rx="8" fill="${c}18" stroke="${c}" stroke-width="1.8" stroke-opacity="${opacity}"/>
+                    <text x="24" y="${y + 22}" font-size="15" fill="${c}" font-weight="bold">${st.icon} ${st.label}</text>
+                    <text x="24" y="${y + 40}" font-size="11" fill="#cbd5e1">${st.detail}</text>
+                    ${i < stages.length - 1 ? `<line x1="${8 + boxW/2}" y1="${y + boxH}" x2="${8 + boxW/2}" y2="${y + rowHeight}" stroke="#475569" stroke-width="2" stroke-dasharray="4 3"/>
+                    <polygon points="${8 + boxW/2 - 5},${y + rowHeight - 4} ${8 + boxW/2 + 5},${y + rowHeight - 4} ${8 + boxW/2},${y + rowHeight + 4}" fill="#475569"/>` : ''}`;
         }).join('');
 
         // entropy gauge
         const entWidth = Math.min(100, (entropy / 8) * 100);
+        const familyTag = isMal ? '🚨 MÃ ĐỘC' : '✅ KHÔNG RÕ MÃ ĐỘC';
+        const familyColor2 = isMal ? '#EF4444' : '#10B981';
+
         return `
-        <div style="margin-bottom:8px;">
-            <div style="font-size:0.82rem; color:var(--text-secondary); margin-bottom:4px;">📐 Sơ đồ luồng phân tích — họ "${family}"</div>
-            <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                <div style="flex:1; min-width:220px;">
-                    <svg viewBox="0 0 320 ${30 + chainLabels.length * 55}" style="width:100%; max-width:360px; height:auto; background:#0f172a; border-radius:6px; border:1px solid #1f2937;">
+        <div style="margin-bottom:10px;">
+            <div style="font-size:0.88rem; color:var(--text-secondary); margin-bottom:6px;">📐 Sơ đồ Luồng Tấn công (Kill Chain) — họ "${family}"</div>
+            <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                <div style="flex:1.4; min-width:300px;">
+                    <svg viewBox="0 0 ${boxW + 16} ${svgH}" style="width:100%; max-width:520px; height:auto; background:#0f172a; border-radius:6px; border:1px solid #1f2937;">
                         ${boxes}
                     </svg>
                 </div>
-                <div style="flex:1; min-width:200px; background:#0f172a; border:1px solid #1f2937; border-radius:6px; padding:12px;">
-                    <div style="font-size:0.8rem; color:#e5e7eb; font-weight:700; margin-bottom:6px;">Thang Entropy</div>
-                    <div style="height:14px; background:#1f2937; border-radius:99px; overflow:hidden; position:relative;">
-                        <div style="height:100%; width:${entWidth}%; background:${entColor}; border-radius:99px;"></div>
+                <div style="flex:1; min-width:190px; background:#0f172a; border:1px solid #1f2937; border-radius:6px; padding:14px;">
+                    <div style="font-size:0.88rem; color:#e5e7eb; font-weight:700; margin-bottom:6px;">📊 Thang Entropy</div>
+                    <div style="height:16px; background:#1f2937; border-radius:99px; overflow:hidden; position:relative;">
+                        <div style="height:100%; width:${entWidth}%; background:${entColor}; border-radius:99px; transition:width 0.3s;"></div>
                     </div>
-                    <div style="font-size:0.78rem; color:${entColor}; font-weight:700; margin-top:4px;">${entropy} / 8</div>
-                    <div style="font-size:0.72rem; color:#9ca3af; margin-top:2px;">${entropy >= 7 ? '⚠ Cao — nghi packed' : entropy >= 5.5 ? 'Trung bình' : 'Thấp — mã đọc được'}</div>
-                    <div style="margin-top:8px; padding-top:8px; border-top:1px solid #1f2937; font-size:0.78rem;">
-                        <span style="color:${isMal ? '#EF4444' : '#10B981'}; font-weight:700;">${isMal ? '🚨 MÃ ĐỘC' : '✅ KHÔNG RÕ MÃ ĐỘC'}</span>
+                    <div style="font-size:0.9rem; color:${entColor}; font-weight:700; margin-top:5px;">${entropy} / 8 bit</div>
+                    <div style="font-size:0.8rem; color:#9ca3af; margin-top:2px;">${entropy >= 7 ? '⚠ Cao — nghi packed/encrypted' : entropy >= 5.5 ? 'Trung bình — hỗn hợp mã + dữ liệu' : 'Thấp — mã nguồn đọc được'}</div>
+                    <div style="margin-top:12px; padding-top:10px; border-top:1px solid #1f2937;">
+                        <div style="font-size:0.9rem; color:${familyColor2}; font-weight:800;">${familyTag}</div>
+                        <div style="font-size:0.78rem; color:#9ca3af; margin-top:3px;">${family}</div>
                     </div>
+                    ${ma.yara_matches && ma.yara_matches.length ? `<div style="margin-top:8px; font-size:0.78rem; color:#f87171;">🧬 YARA: ${ma.yara_matches.map(m=>m.rule).join(', ')}</div>` : ''}
                 </div>
             </div>
         </div>`;

@@ -171,19 +171,26 @@ const SAMPLES = {
 // ================= 7 BƯỚC =================
 const STEPS = [
   { icon: '🔍', tag: 'BƯỚC 1', tagColor: 'var(--blue)', title: 'Nhận diện loại file',
-    desc: 'Đọc <b>magic bytes</b> ở đầu file và phần mở rộng. File bắt đầu bằng "MZ" là PE (Windows), "<?php" là mã PHP, "#!" là shell script... Loại file quyết định cách mổ xẻ tiếp theo.', },
+    desc: 'Đọc <b>magic bytes</b> ở đầu file và phần mở rộng. File bắt đầu bằng "MZ" là PE (Windows), "<?php" là mã PHP, "#!" là shell script... Loại file quyết định cách mổ xẻ tiếp theo.',
+    plain: 'Mỗi file máy tính đều có vài ký tự ĐẦU TIÊN "khai báo" nó là gì (giống như tên gọi trên bao bì). Đọc vài ký tự đầu là biết ngay: MZ = file Windows, <?php = mã web PHP. Biết là gì rồi mới chọn đúng cách mổ xẻ.' },
   { icon: '🔑', tag: 'BƯỚC 2', tagColor: 'var(--cyan)', title: 'Băm mật mã (hash)',
-    desc: 'Tính MD5, SHA-1, SHA-256, SHA-512 cho toàn bộ nội dung. Kết quả là "<b>dấu vân tay</b>" duy nhất của mẫu — dùng tra cứu danh tiếng trên VirusTotal/MalwareBazaar.', },
+    desc: 'Tính MD5, SHA-1, SHA-256, SHA-512 cho toàn bộ nội dung. Kết quả là "<b>dấu vân tay</b>" duy nhất của mẫu — dùng tra cứu danh tiếng trên VirusTotal/MalwareBazaar.',
+    plain: 'Hash giống như LẤY DẤU VÂN TAY của file: 2 file giống hệt nhau thì dấu vân tay giống hệt. Lấy dấu vân tay này tra lên VirusTotal là biết file này đã từng bị phần mềm diệt virus phát hiện chưa.' },
   { icon: '📊', tag: 'BƯỚC 3', tagColor: 'var(--green)', title: 'Đo Entropy Shannon',
-    desc: 'Đo độ "hỗn loạn" của dữ liệu (0–8 bit/ký tự). <b>Entropy cao (>7)</b> = mã bị nén/mã hóa (nghi packer). Thấp (4–6) = mã nguồn đọc được bình thường.', },
+    desc: 'Đo độ "hỗn loạn" của dữ liệu (0–8 bit/ký tự). <b>Entropy cao (>7)</b> = mã bị nén/mã hóa (nghi packer). Thấp (4–6) = mã nguồn đọc được bình thường.',
+    plain: 'Entropy đo mức "lộn xộn": văn bản thì ngăn nắp (điểm thấp), file nén/mã hóa thì lộn xộn hết (điểm cao). Mã độc hay NÉN code để né phần mềm diệt virus, nên điểm cao = đáng ngờ.' },
   { icon: '🧬', tag: 'BƯỚC 4', tagColor: 'var(--amber)', title: 'Mổ xẻ cấu trúc',
-    desc: 'Với <b>PE</b>: phân tích Import/Export Table, section, entry point, phát hiện packer. Với <b>script</b>: đọc mã nguồn tìm lệnh <b>sink</b> (eval, system, socket...).', },
+    desc: 'Với <b>PE</b>: phân tích Import/Export Table, section, entry point, phát hiện packer. Với <b>script</b>: đọc mã nguồn tìm lệnh <b>sink</b> (eval, system, socket...).',
+    plain: 'Đây là bước "mổ xẻ" thật: nhìn vào bên trong. Với file Windows thì xem nó MƯỢN những hàm nào của hệ thống (hàm mở chương trình, hàm kết nối mạng = đáng ngờ). Với code web thì tìm lệnh "chạy thử" như eval() nhận dữ liệu người dùng gửi vào.' },
   { icon: '🎯', tag: 'BƯỚC 5', tagColor: 'var(--red)', title: 'Trích xuất IoC',
-    desc: 'Tìm IP, URL, domain bằng regex — đây là dấu vết <b>máy chủ C2</b> mà mã độc kết nối về, dùng để chặn tại tường lửa và truy vết.', },
+    desc: 'Tìm IP, URL, domain bằng regex — đây là dấu vết <b>máy chủ C2</b> mà mã độc kết nối về, dùng để chặn tại tường lửa và truy vết.',
+    plain: 'Mã độc thường "gọi điện về tổng hành dinh" của hacker (C2). Bước này đi TÌM số điện thoại ấy: địa chỉ IP, tên miền, đường link. Tìm được thì chặn nó ở tường lửa, cắt đứt liên lạc.' },
   { icon: '⚔️', tag: 'BƯỚC 6', tagColor: 'var(--purple)', title: 'Luồng tấn công',
-    desc: 'Ghép các phát hiện thành <b>kill chain</b>: Kẻ tấn công → input → giải mã → thực thi → chiếm quyền/C2.', },
+    desc: 'Ghép các phát hiện thành <b>kill chain</b>: Kẻ tấn công → input → giải mã → thực thi → chiếm quyền/C2.',
+    plain: 'Ghép mọi manh mối lại thành 1 câu chuyện: hacker ra tay thế nào → lệnh đi qua đâu → cuối cùng chiếm được gì. Giống thám tử nối các manh mối thành chuỗi gây án.' },
   { icon: '🚨', tag: 'KẾT LUẬN', tagColor: 'var(--red)', title: 'Kết luận & ánh xạ',
-    desc: 'Tổng hợp dấu hiệu để kết luận mẫu có phải mã độc, thuộc họ nào, và ánh xạ vào <b>MITRE ATT&CK</b> + <b>CWE</b> + <b>CVSS</b>.', },
+    desc: 'Tổng hợp dấu hiệu để kết luận mẫu có phải mã độc, thuộc họ nào, và ánh xạ vào <b>MITRE ATT&CK</b> + <b>CWE</b> + <b>CVSS</b>.',
+    plain: 'Phán quyết cuối: CÓ ĐỘC hay KHÔNG? Độc thuộc loại gì (webshell, ransomware...)? Nguy hiểm cỡ mấy? Rồi đối chiếu với bảng chuẩn quốc tế MITRE ATT&CK để biết tên "thủ đoạn" của hacker.' },
 ];
 
 let currentStep = 0;
@@ -323,6 +330,13 @@ function render() {
         <div class="result-row"><span class="icon">🛡️</span><span class="k">Khuyến nghị</span><span class="v">${isMal ? 'Cách ly file, chặn IoC, điều tra nguồn gốc' : 'Unpack trước khi phân tích tiếp'}</span></div>
       </div>`;
   }
+
+  // Thêm khối chú thích "Hiểu đơn giản" cho người chưa biết gì
+  body += `
+    <div style="margin-top:20px; padding:14px 16px; background:rgba(34,211,238,0.06); border:1px solid rgba(34,211,238,0.25); border-radius:10px;">
+      <div style="font-weight:800; color:var(--cyan); margin-bottom:6px;">💡 Hiểu đơn giản (cho người mới bắt đầu):</div>
+      <div style="color:var(--text); font-size:0.98rem; line-height:1.6;">${s.plain}</div>
+    </div>`;
 
   stage.innerHTML = body;
   document.getElementById('prevBtn').disabled = (currentStep === 0);

